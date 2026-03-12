@@ -970,7 +970,7 @@ ${mutatedSeq}`;
           )}
 
           {/* GC Analytics Placeholder */}
-          {activeView === "gc-analytics" && <GCAnalyticsView />}
+          {activeView === "gc-analytics" && <GCAnalyticsView sequence={fastaRecords[0]?.sequence} />}
 
           {/* Restriction Mapping Placeholder */}
           {activeView === "restriction" && <RestrictionMappingView />}

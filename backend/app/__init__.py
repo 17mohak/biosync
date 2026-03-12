@@ -10,7 +10,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import alignment, analyze, biology, export, fasta, history, ncbi
+from app.api.routers import alignment, analyze, analytics, biology, export, fasta, history, ncbi
 from app.db.base import init_db
 
 
@@ -58,6 +58,7 @@ def create_app() -> FastAPI:
     application.include_router(fasta.router)
     application.include_router(history.router)
     application.include_router(analyze.router)
+    application.include_router(analytics.router)
     application.include_router(export.router)
     application.include_router(ncbi.router)
 
@@ -75,6 +76,7 @@ def create_app() -> FastAPI:
                 "/api/history/save",
                 "/api/history",
                 "/api/analyze/stability",
+                "/api/analytics/profile",
                 "/api/export/{job_id}",
                 "/api/ncbi/fetch/{accession_id}",
             ],

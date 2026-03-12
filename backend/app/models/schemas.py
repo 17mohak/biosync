@@ -215,3 +215,57 @@ class StabilityResponse(BaseModel):
     position_breakdown: list[dict[str, Any]]
     breakdown_truncated: bool = Field(False, description="True if position_breakdown was omitted due to size")
     clinical_translation: str = Field(..., description="Layman-friendly summary of the analysis results")
+
+
+# ---------------------------------------------------------------------------
+# Analytics / GC Content schemas
+# ---------------------------------------------------------------------------
+
+class AnalyticsProfileRequest(BaseModel):
+    sequence: str = Field(
+        ...,
+        description="DNA sequence to analyze (A, C, G, T characters)",
+    )
+    window_size: int = Field(
+        20,
+        ge=5,
+        le=1000,
+        description="Sliding window size for GC analysis (default: 20)",
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [{
+                "sequence": "ATGCGATCGATCGATCGATCGATCGATCGATCG",
+                "window_size": 20
+            }]
+        }
+    }
+
+
+class GlobalStatsResponse(BaseModel):
+    """Global sequence statistics."""
+    length: int = Field(..., description="Total sequence length")
+    gc_content: float = Field(..., description="GC content percentage (0-100)")
+    count_a: int = Field(..., description="Count of Adenine bases")
+    count_t: int = Field(..., description="Count of Thymine bases")
+    count_g: int = Field(..., description="Count of Guanine bases")
+    count_c: int = Field(..., description="Count of Cytosine bases")
+    count_other: int = Field(..., description="Count of non-standard characters")
+
+
+class SlidingWindowGC(BaseModel):
+    """GC content for a single sliding window position."""
+    position: int = Field(..., description="Position in sequence (center of window)")
+    gc_percent: float = Field(..., description="GC percentage in this window")
+
+
+class AnalyticsProfileResponse(BaseModel):
+    """Complete sequence analytics response."""
+    global_stats: GlobalStatsResponse = Field(..., description="Global sequence statistics")
+    melting_temperature: float = Field(..., description="Estimated melting temperature (Tm) in Celsius")
+    tm_formula_used: str = Field(..., description="Tm formula used: 'short' (<14bp) or 'long' (>=14bp)")
+    sliding_window_gc: list[SlidingWindowGC] = Field(
+        default_factory=list,
+        description="GC content across sliding windows"
+    )

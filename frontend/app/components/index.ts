@@ -12,7 +12,8 @@ export { VariantCatalogModal } from "./VariantCatalogModal";
 export { Navigation } from "./Navigation";
 export { ClinicalTranslationCard } from "./ClinicalTranslationCard";
 export { Sidebar } from "./Sidebar";
-export { GCAnalyticsView, RestrictionMappingView, ProteinViewerView } from "./PlaceholderViews";
+export { GCAnalyticsView } from "./GCAnalyticsView";
+export { RestrictionMappingView, ProteinViewerView } from "./PlaceholderViews";
 
 // Default exports
 export { default as StabilityHeatmapDefault } from "./StabilityHeatmap";
