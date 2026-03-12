@@ -30,6 +30,7 @@ import {
   DNASequenceStream,
   ExplainerAccordion,
   VariantCatalogModal,
+  ClinicalTranslationCard,
 } from "./components";
 
 // =============================================================================
@@ -52,7 +53,7 @@ interface AlignmentResult {
   local_score?: number;
   score_matrix: number[][];
   algorithm: string;
-  matrix_truncated?: boolean; // 🆕 NEW FLAG
+  matrix_compressed: boolean; // 🆕 CHANGED: matrix always available, downsampled if large
 }
 
 interface StabilityResult {
@@ -77,7 +78,8 @@ interface StabilityResult {
     position_type: string;
     instability: number;
   }>;
-  breakdown_truncated?: boolean; // 🆕 NEW FLAG
+  breakdown_truncated: boolean;
+  clinical_translation: string; // 🆕 NEW FIELD
 }
 
 interface JobRecord {
@@ -507,6 +509,16 @@ const SpatialDataCanvas: React.FC<{
         {jobId && <DownloadReportButton jobId={jobId} variant="premium" />}
       </div>
 
+      {/* AI Translation Card */}
+      {stability && (
+        <div className="mb-6">
+          <ClinicalTranslationCard 
+            translation={stability.clinical_translation}
+            confidenceScore={stability.confidence_score}
+          />
+        </div>
+      )}
+
       {/* Main Grid */}
       <div className="grid lg:grid-cols-5 gap-8">
         {/* Left: Sequences */}
@@ -575,7 +587,7 @@ const SpatialDataCanvas: React.FC<{
               seq2={seq2}
               maxDisplayRows={20}
               maxDisplayCols={24}
-              matrix_truncated={alignment.matrix_truncated}
+              matrix_compressed={alignment.matrix_compressed}
             />
           </div>
         </div>

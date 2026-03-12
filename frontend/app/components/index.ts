@@ -9,6 +9,8 @@ export { DownloadReportButton } from "./DownloadReportButton";
 export { DNASequenceStream } from "./DNASequenceStream";
 export { ExplainerAccordion } from "./ExplainerAccordion";
 export { VariantCatalogModal } from "./VariantCatalogModal";
+export { Navigation } from "./Navigation";
+export { ClinicalTranslationCard } from "./ClinicalTranslationCard";
 
 // Default exports
 export { default as StabilityHeatmapDefault } from "./StabilityHeatmap";
@@ -18,3 +20,5 @@ export { default as DownloadReportButtonDefault } from "./DownloadReportButton";
 export { default as DNASequenceStreamDefault } from "./DNASequenceStream";
 export { default as ExplainerAccordionDefault } from "./ExplainerAccordion";
 export { default as VariantCatalogModalDefault } from "./VariantCatalogModal";
+export { default as NavigationDefault } from "./Navigation";
+export { default as ClinicalTranslationCardDefault } from "./ClinicalTranslationCard";
