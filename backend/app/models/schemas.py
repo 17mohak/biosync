@@ -42,8 +42,8 @@ class GlobalAlignmentResponse(BaseModel):
     alignment_2: str
     optimal_score: int
     algorithm: str = "needleman-wunsch"
-    score_matrix: list[list[int]] = Field(default_factory=list, description="Full scoring matrix for visualization")
-    matrix_truncated: bool = Field(False, description="True if score_matrix was omitted due to size")
+    score_matrix: list[list[int]] = Field(default_factory=list, description="Scoring matrix (downsampled if large sequences)")
+    matrix_compressed: bool = Field(False, description="True if score_matrix was downsampled to fit 100x100 max")
 
 
 class LocalAlignmentResponse(BaseModel):
@@ -51,8 +51,8 @@ class LocalAlignmentResponse(BaseModel):
     local_alignment_2: str
     local_score: int
     algorithm: str = "smith-waterman"
-    score_matrix: list[list[int]] = Field(default_factory=list, description="Full scoring matrix for visualization")
-    matrix_truncated: bool = Field(False, description="True if score_matrix was omitted due to size")
+    score_matrix: list[list[int]] = Field(default_factory=list, description="Scoring matrix (downsampled if large sequences)")
+    matrix_compressed: bool = Field(False, description="True if score_matrix was downsampled to fit 100x100 max")
 
 
 # ---------------------------------------------------------------------------
@@ -204,3 +204,4 @@ class StabilityResponse(BaseModel):
     gap_count: int
     position_breakdown: list[dict[str, Any]]
     breakdown_truncated: bool = Field(False, description="True if position_breakdown was omitted due to size")
+    clinical_translation: str = Field(..., description="Layman-friendly summary of the analysis results")

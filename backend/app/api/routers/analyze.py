@@ -24,9 +24,9 @@ router = APIRouter(prefix="/api/analyze", tags=["Analysis"])
         "Accepts the two gapped aligned strings from any alignment result "
         "(NW or SW) and runs the probabilistic mutation stability engine. "
         "Returns a Confidence Score (0–100), Mutation Hotspots (clustered "
-        "instability windows), GC content per sequence, and a full "
-        "per-position breakdown. Note: position_breakdown is truncated for "
-        "alignments > 100bp to prevent DOM overflow."
+        "instability windows), GC content per sequence, a full "
+        "per-position breakdown, and a clinical translation summary. "
+        "Note: position_breakdown is truncated for alignments > 100bp to prevent DOM overflow."
     ),
 )
 def stability_analysis(data: StabilityRequest) -> StabilityResponse:
@@ -64,4 +64,5 @@ def stability_analysis(data: StabilityRequest) -> StabilityResponse:
             for p in result.position_breakdown
         ],
         breakdown_truncated=result.breakdown_truncated,
+        clinical_translation=result.clinical_translation,
     )

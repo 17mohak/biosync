@@ -1,13 +1,14 @@
 """
 core/ml_engine.py
 ==================
-Probabilistic Mutation Stability Engine.
+Probabilistic Mutation Stability Engine with Clinical Translation.
 
 Analyses a pairwise sequence alignment (the output of NW or SW) and produces:
   - A Confidence Score  (0–100):  100 = perfect alignment, 0 = all gaps/mismatches.
   - Mutation Hotspots:  sliding-window regions where instability is concentrated.
   - GC Content per sequence.
   - Per-position breakdown (MATCH / MISMATCH / GAP).
+  - Clinical Translation: A layman-friendly summary of the findings.
 
 No external ML framework required — the model is numpy-only, deterministic,
 and fully unit-testable.
@@ -71,6 +72,7 @@ class StabilityResult:
     gap_count:      int
     position_breakdown: list[PositionBreakdown]
     breakdown_truncated: bool = False             # True if position_breakdown was omitted
+    clinical_translation: str = ""                # Layman-friendly summary
 
 
 # ---------------------------------------------------------------------------
@@ -158,6 +160,142 @@ def _find_hotspots(
 
 
 # ---------------------------------------------------------------------------
+# Clinical Translation Engine
+# ---------------------------------------------------------------------------
+
+def _generate_clinical_translation(
+    confidence_score: float,
+    hotspots: list[MutationHotspot],
+    mismatch_count: int,
+    gap_count: int,
+    total_positions: int,
+) -> str:
+    """
+    Generate a layman-friendly clinical translation of the stability analysis.
+    
+    This function produces a 2-3 sentence summary that explains the results
+    in plain language, suitable for non-technical users.
+    
+    Parameters
+    ----------
+    confidence_score : float
+        The stability confidence score (0-100)
+    hotspots : list
+        Detected mutation hotspots
+    mismatch_count : int
+        Number of mismatches in alignment
+    gap_count : int
+        Number of gaps in alignment
+    total_positions : int
+        Total alignment length
+    
+    Returns
+    -------
+    str
+        A 2-3 sentence layman summary
+    """
+    # Determine overall stability category
+    if confidence_score >= 90:
+        stability_level = "excellent"
+        stability_desc = "highly stable with minimal variation"
+    elif confidence_score >= 75:
+        stability_level = "good"
+        stability_desc = "stable with some minor variations"
+    elif confidence_score >= 50:
+        stability_level = "moderate"
+        stability_desc = "moderately stable with notable differences"
+    elif confidence_score >= 25:
+        stability_level = "low"
+        stability_desc = "significant structural differences detected"
+    else:
+        stability_level = "poor"
+        stability_desc = "substantial divergence between sequences"
+    
+    # Build the translation
+    sentences = []
+    
+    # Sentence 1: Overall stability
+    sentences.append(
+        f"BioSync analysis indicates a {confidence_score:.1f}% stability match, "
+        f"indicating {stability_desc}."
+    )
+    
+    # Sentence 2: Mutation details or stability confirmation
+    if hotspots:
+        hotspot_count = len(hotspots)
+        if hotspot_count == 1:
+            hs = hotspots[0]
+            position_info = f"position {hs.start}"
+            if hs.end > hs.start:
+                position_info = f"positions {hs.start}-{hs.end}"
+            
+            mutation_type = hs.dominant_type.lower()
+            if mutation_type == "mismatch":
+                mutation_desc = "a base substitution (one nucleotide replaced by another)"
+            elif mutation_type == "gap":
+                mutation_desc = "an insertion or deletion event"
+            else:
+                mutation_desc = "a structural variation"
+            
+            sentences.append(
+                f"A critical mutation hotspot was detected at {position_info}, "
+                f"characterized by {mutation_desc}."
+            )
+        else:
+            # Multiple hotspots
+            positions = []
+            for hs in hotspots[:3]:  # Limit to first 3 for brevity
+                if hs.end > hs.start:
+                    positions.append(f"{hs.start}-{hs.end}")
+                else:
+                    positions.append(str(hs.start))
+            
+            pos_str = ", ".join(positions)
+            if len(hotspots) > 3:
+                pos_str += f", and {len(hotspots) - 3} more"
+            
+            sentences.append(
+                f"{hotspot_count} mutation hotspots were identified at positions {pos_str}, "
+                f"which may indicate regions of evolutionary or clinical significance."
+            )
+        
+        # Sentence 3: Clinical context
+        if confidence_score >= 75:
+            sentences.append(
+                "In a clinical context, these variations are likely benign, "
+                "though further investigation may be warranted for specific variants."
+            )
+        elif confidence_score >= 50:
+            sentences.append(
+                "These structural anomalies could potentially affect protein function, "
+                "similar to patterns observed in known genetic variants."
+            )
+        else:
+            sentences.append(
+                "The detected variations suggest significant divergence that may impact "
+                "biological function, resembling patterns seen in pathogenic variants or different species."
+            )
+    else:
+        # No hotspots - highly stable
+        if confidence_score >= 90:
+            sentences.append(
+                "No structural anomalies or mutations were detected. "
+                "The sequence appears healthy and well-conserved."
+            )
+        elif confidence_score >= 75:
+            sentences.append(
+                "While some minor variations exist, no significant mutation hotspots were identified."
+            )
+        else:
+            sentences.append(
+                f"Although the overall stability is {stability_level}, "
+                f"no concentrated mutation hotspots were detected."
+            )
+    
+    return " ".join(sentences)
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -231,6 +369,15 @@ def analyze_alignment_stability(
         breakdown_out = breakdown
         breakdown_truncated = False
 
+    # ── Clinical Translation ────────────────────────────────────────────────
+    clinical_translation = _generate_clinical_translation(
+        confidence_score=confidence_score,
+        hotspots=hotspots,
+        mismatch_count=mismatch_count,
+        gap_count=gap_count,
+        total_positions=len(breakdown),
+    )
+
     return StabilityResult(
         confidence_score=confidence_score,
         raw_instability=round(raw_instability, 4),
@@ -243,4 +390,5 @@ def analyze_alignment_stability(
         gap_count=gap_count,
         position_breakdown=breakdown_out,
         breakdown_truncated=breakdown_truncated,
+        clinical_translation=clinical_translation,
     )

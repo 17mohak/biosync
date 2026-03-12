@@ -51,7 +51,7 @@ def _validate_sequence(seq: str, field_name: str) -> str:
     description=(
         "Align two nucleic-acid sequences end-to-end using the Needleman-Wunsch "
         "dynamic programming algorithm. Returns the optimal global alignment and score. "
-        "Note: score_matrix is truncated for sequences > 100bp to prevent DOM overflow."
+        "Note: score_matrix is downsampled (max pooling) for sequences > 100bp to fit 100x100 max."
     ),
 )
 def global_alignment(data: AlignmentRequest) -> GlobalAlignmentResponse:
@@ -70,7 +70,7 @@ def global_alignment(data: AlignmentRequest) -> GlobalAlignmentResponse:
         alignment_2=result["alignment_2"],
         optimal_score=result["optimal_score"],
         score_matrix=result["score_matrix"],
-        matrix_truncated=result["matrix_truncated"],
+        matrix_compressed=result["matrix_compressed"],
     )
 
 
@@ -82,7 +82,7 @@ def global_alignment(data: AlignmentRequest) -> GlobalAlignmentResponse:
         "Find the best-scoring local alignment between two nucleic-acid sequences "
         "using the Smith-Waterman algorithm. Scores are floored at 0, so only "
         "similar sub-regions are reported. "
-        "Note: score_matrix is truncated for sequences > 100bp to prevent DOM overflow."
+        "Note: score_matrix is downsampled (max pooling) for sequences > 100bp to fit 100x100 max."
     ),
 )
 def local_alignment(data: AlignmentRequest) -> LocalAlignmentResponse:
@@ -101,5 +101,5 @@ def local_alignment(data: AlignmentRequest) -> LocalAlignmentResponse:
         local_alignment_2=result["local_alignment_2"],
         local_score=result["local_score"],
         score_matrix=result["score_matrix"],
-        matrix_truncated=result["matrix_truncated"],
+        matrix_compressed=result["matrix_compressed"],
     )

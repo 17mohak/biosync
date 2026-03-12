@@ -7,12 +7,75 @@ Numpy-optimised implementations of:
 
 Both functions are pure (no FastAPI dependency) so they can be unit-tested
 independently from the HTTP layer.
+
+Matrix Downsampling:
+  For sequences > 100bp, the score matrix is downsampled using max pooling
+  to a maximum of 100x100 cells. This preserves visual patterns while
+  preventing frontend DOM overflow.
 """
 
 from __future__ import annotations
 
 import numpy as np
 from functools import lru_cache
+
+
+# ---------------------------------------------------------------------------
+# Matrix Downsampling (Max Pooling)
+# ---------------------------------------------------------------------------
+
+MAX_MATRIX_DIM = 100  # Maximum dimension for compressed matrix
+
+
+def _downsample_matrix(matrix: np.ndarray, max_dim: int = MAX_MATRIX_DIM) -> np.ndarray:
+    """
+    Downsample a 2D matrix using max pooling to fit within max_dim x max_dim.
+    
+    This preserves the visual structure of the alignment matrix while reducing
+    the number of cells for efficient frontend rendering.
+    
+    Parameters
+    ----------
+    matrix : np.ndarray
+        The original score matrix (n+1) × (m+1)
+    max_dim : int
+        Maximum allowed dimension (default 100)
+    
+    Returns
+    -------
+    np.ndarray
+        Downsampled matrix with dimensions ≤ max_dim × max_dim
+    """
+    n_rows, n_cols = matrix.shape
+    
+    # If already within limits, return as-is
+    if n_rows <= max_dim and n_cols <= max_dim:
+        return matrix
+    
+    # Calculate pool sizes for each dimension
+    row_pool = max(1, int(np.ceil(n_rows / max_dim)))
+    col_pool = max(1, int(np.ceil(n_cols / max_dim)))
+    
+    # Calculate output dimensions
+    out_rows = int(np.ceil(n_rows / row_pool))
+    out_cols = int(np.ceil(n_cols / col_pool))
+    
+    # Create output matrix
+    downsampled = np.zeros((out_rows, out_cols), dtype=matrix.dtype)
+    
+    # Max pooling
+    for i in range(out_rows):
+        for j in range(out_cols):
+            row_start = i * row_pool
+            row_end = min((i + 1) * row_pool, n_rows)
+            col_start = j * col_pool
+            col_end = min((j + 1) * col_pool, n_cols)
+            
+            # Extract pool region and take maximum
+            pool_region = matrix[row_start:row_end, col_start:col_end]
+            downsampled[i, j] = np.max(pool_region)
+    
+    return downsampled
 
 
 # ---------------------------------------------------------------------------
@@ -33,11 +96,12 @@ def needleman_wunsch(
     Returns
     -------
     dict with keys:
-        alignment_1   – gapped version of seq1
-        alignment_2   – gapped version of seq2
-        optimal_score – integer score at matrix[n, m]
-        score_matrix  – the full (n+1) × (m+1) numpy array (as nested lists)
-        algorithm     – literal "needleman-wunsch"
+        alignment_1       – gapped version of seq1
+        alignment_2       – gapped version of seq2
+        optimal_score     – integer score at matrix[n, m]
+        score_matrix      – the scoring matrix (downsampled if large)
+        matrix_compressed – True if matrix was downsampled
+        algorithm         – literal "needleman-wunsch"
     """
     n, m = len(seq1), len(seq2)
 
@@ -83,22 +147,23 @@ def needleman_wunsch(
     while j > 0:
         align1.append("-"); align2.append(seq2[j - 1]); j -= 1
 
-    # DOM SAFEGUARD: Truncate matrix for sequences > 100bp to prevent
-    # catastrophic frontend DOM freezing with large viral genomes (30,000+ bp)
+    # ── Matrix Compression ──────────────────────────────────────────────────
+    # For sequences > 100bp, downsample matrix to max 100x100 using max pooling
     if len(seq1) > 100 or len(seq2) > 100:
-        score_matrix_out = []
-        matrix_truncated = True
+        compressed_matrix = _downsample_matrix(score)
+        score_matrix_out = compressed_matrix.tolist()
+        matrix_compressed = True
     else:
         score_matrix_out = score.tolist()
-        matrix_truncated = False
+        matrix_compressed = False
 
     return {
-        "alignment_1":   "".join(reversed(align1)),
-        "alignment_2":   "".join(reversed(align2)),
-        "optimal_score": int(score[n, m]),
-        "score_matrix":  score_matrix_out,
-        "matrix_truncated": matrix_truncated,
-        "algorithm":     "needleman-wunsch",
+        "alignment_1":       "".join(reversed(align1)),
+        "alignment_2":       "".join(reversed(align2)),
+        "optimal_score":     int(score[n, m]),
+        "score_matrix":      score_matrix_out,
+        "matrix_compressed": matrix_compressed,
+        "algorithm":         "needleman-wunsch",
     }
 
 
@@ -125,11 +190,12 @@ def smith_waterman(
     Returns
     -------
     dict with keys:
-        local_alignment_1 – gapped local segment of seq1
-        local_alignment_2 – gapped local segment of seq2
-        local_score       – best local alignment score
-        score_matrix      – the full (n+1) × (m+1) numpy array (as nested lists)
-        algorithm         – literal "smith-waterman"
+        local_alignment_1  – gapped local segment of seq1
+        local_alignment_2  – gapped local segment of seq2
+        local_score        – best local alignment score
+        score_matrix       – the scoring matrix (downsampled if large)
+        matrix_compressed  – True if matrix was downsampled
+        algorithm          – literal "smith-waterman"
     """
     n, m = len(seq1), len(seq2)
 
@@ -167,20 +233,21 @@ def smith_waterman(
             align2.append(seq2[j - 1])
             j -= 1
 
-    # DOM SAFEGUARD: Truncate matrix for sequences > 100bp to prevent
-    # catastrophic frontend DOM freezing with large viral genomes (30,000+ bp)
+    # ── Matrix Compression ──────────────────────────────────────────────────
+    # For sequences > 100bp, downsample matrix to max 100x100 using max pooling
     if len(seq1) > 100 or len(seq2) > 100:
-        score_matrix_out = []
-        matrix_truncated = True
+        compressed_matrix = _downsample_matrix(score)
+        score_matrix_out = compressed_matrix.tolist()
+        matrix_compressed = True
     else:
         score_matrix_out = score.tolist()
-        matrix_truncated = False
+        matrix_compressed = False
 
     return {
         "local_alignment_1": "".join(reversed(align1)),
         "local_alignment_2": "".join(reversed(align2)),
         "local_score":       best_score,
         "score_matrix":      score_matrix_out,
-        "matrix_truncated":  matrix_truncated,
+        "matrix_compressed": matrix_compressed,
         "algorithm":         "smith-waterman",
     }
