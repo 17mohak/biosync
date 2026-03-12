@@ -264,9 +264,36 @@ const GenBankImport: React.FC<{
       const response = await fetch(`http://localhost:8000/api/ncbi/fetch/${accessionId.trim()}`);
       if (!response.ok) throw new Error("Failed to fetch from NCBI");
       const data = await response.json();
-      onFetch(data.fasta_text);
-    } catch (err) {
-      setError("Failed to fetch sequence. Please check the accession ID.");
+      
+      // Extract the original sequence and create a synthetic variant
+      const originalFasta = data.fasta_text;
+      const lines = originalFasta.split('\n');
+      const header = lines[0]; // >accession description
+      const sequence = lines.slice(1).join('');
+      
+      // Create a synthetic mutated variant (~5% mutation rate)
+      const bases = ['A', 'T', 'C', 'G'];
+      let mutatedSequence = '';
+      for (let i = 0; i < sequence.length; i++) {
+        const base = sequence[i];
+        if (Math.random() < 0.05) {
+          // Mutate this base
+          const otherBases = bases.filter(b => b !== base.toUpperCase());
+          mutatedSequence += otherBases[Math.floor(Math.random() * otherBases.length)];
+        } else {
+          mutatedSequence += base;
+        }
+      }
+      
+      // Create a 2-sequence FASTA file
+      const syntheticFasta = `${header}
+${sequence}
+>${accessionId.trim()}_VARIANT Synthetic mutated variant
+${mutatedSequence}`;
+      
+      onFetch(syntheticFasta);
+    } catch (err: any) {
+      setError(`Fetch failed: ${err.message}`);
     }
   };
 
@@ -722,15 +749,48 @@ export default function BioSyncCommandCenter() {
 
   const handleCatalogSelect = async (accession: string) => {
     setAccessionId(accession);
-    // Fetch and run analysis
     setIsLoading(true);
     try {
+      // Fetch the NCBI sequence
       const response = await fetch(`http://localhost:8000/api/ncbi/fetch/${accession}`);
       if (!response.ok) throw new Error("Failed to fetch from NCBI");
       const data = await response.json();
-      await runAnalysis(data.fasta_text);
-    } catch (err) {
+      
+      // Extract the original sequence and create a synthetic variant
+      const originalFasta = data.fasta_text;
+      const lines = originalFasta.split('\n');
+      const header = lines[0]; // >accession description
+      const sequence = lines.slice(1).join('');
+      
+      // Create a synthetic mutated variant (~5% mutation rate)
+      const bases = ['A', 'T', 'C', 'G'];
+      let mutatedSequence = '';
+      for (let i = 0; i < sequence.length; i++) {
+        const base = sequence[i];
+        if (Math.random() < 0.05) {
+          // Mutate this base
+          const otherBases = bases.filter(b => b !== base.toUpperCase());
+          mutatedSequence += otherBases[Math.floor(Math.random() * otherBases.length)];
+        } else {
+          mutatedSequence += base;
+        }
+      }
+      
+      // Create a 2-sequence FASTA file
+      const syntheticFasta = `${header}
+${sequence}
+>${accession}_VARIANT Synthetic mutated variant
+${mutatedSequence}`;
+      
+      // Create a File object (required by runAnalysis)
+      const file = new File([syntheticFasta], `${accession}_paired.fasta`, { type: 'text/plain' });
+      
+      // Convert File to text for runAnalysis
+      const text = await file.text();
+      await runAnalysis(text);
+    } catch (err: any) {
       console.error("Catalog fetch error:", err);
+      alert(`Fetch failed: ${err.message}`);
     } finally {
       setIsLoading(false);
     }
