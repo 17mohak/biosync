@@ -1,3 +1,4 @@
+```markdown
 # BioSync | Genomic Command Center
 
 ![Architecture](https://img.shields.io/badge/Architecture-Full_Stack-emerald?style=for-the-badge)
@@ -52,60 +53,31 @@ cd backend
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000# 🧬 BioSync | Genomic Command Center
-
-![BioSync Architecture](https://img.shields.io/badge/Architecture-Full_Stack-emerald?style=for-the-badge)
-![Frontend](https://img.shields.io/badge/Frontend-Next.js_14-black?style=for-the-badge&logo=next.js)
-![Backend](https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge&logo=fastapi)
-![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
-
-**BioSync** is an enterprise-grade bioinformatics workspace designed to bridge the gap between heavy computational biology and modern SaaS user experiences. It allows researchers (and non-scientists) to fetch real-world DNA variants, detect microscopic mutations, and predict the impact of structural anomalies in real-time.
-
----
-
-## ✨ Core Features
-
-* **📡 Live NCBI GenBank Integration:** Directly fetch real-world genomic data (SARS-CoV-2, BRCA1, CFTR) using official Accession IDs. 
-* **🔬 Precision Sequence Alignment:** Calculates local and global alignments using a highly optimized Python implementation of the Smith-Waterman and Needleman-Wunsch algorithms.
-* **cinematic Data Visualization:** Replaces traditional, laggy DOM-based grids with a hardware-accelerated **HTML5 Canvas**, rendering dynamic scoring matrices with interactive "flashlight" hover effects at 60FPS.
-* **🔥 Thermodynamic GC Analytics:** Calculates Sequence Length, overall GC Content, and estimates Melting Temperatures (Tm). Features a sliding-window Recharts area graph to visualize localized genetic density.
-* **🧠 Clinical Translation Engine:** Translates complex mathematical stability scores and thermodynamic data into plain-English "Clinical Context" summaries for non-scientists.
-* **📄 Automated Reporting:** Generates clean, 1-page PDF executive summaries of alignment hotspots and stability metrics.
-
----
-
-## 🏗️ The Engineering Architecture
-
-Building a bioinformatics tool for the web introduces massive computational bottlenecks. BioSync was engineered to overcome standard browser and server limitations:
-
-* **O(N*M) CPU Mitigation:** Aligning a 30,000bp viral genome requires a 900-million cell dynamic programming matrix. BioSync utilizes **Algorithmic Downsampling** and **Targeted Window Truncation** on the backend to prevent CPU lockups.
-* **DOM Overload Protection:** Mapping tens of thousands of React `<motion.span>` elements destroys browser memory. BioSync uses a custom **Chunked Rendering Engine** that groups matching DNA strings and only applies CSS animations to the exact mutated anomalies.
-* **Enterprise Caching:** The FastAPI backend utilizes LRU in-memory caching to serve repeated GenBank fetches and mathematical alignments in `O(1)` time.
-
----
-
-## 💻 Tech Stack
-
-### Frontend (Client)
-* **Framework:** Next.js (React)
-* **Styling:** Tailwind CSS, Framer Motion (Glassmorphism & kinetic UI)
-* **Visualization:** HTML5 Canvas API (Matrix), Recharts (Thermodynamics)
-* **Icons:** Lucide React
-
-### Backend (Server)
-* **Framework:** FastAPI (Python)
-* **Algorithms:** Smith-Waterman (Local), Needleman-Wunsch (Global)
-* **External APIs:** NCBI Entrez E-Utilities (GenBank)
-* **Export:** ReportLab (PDF Generation)
-
----
-
-## 🚀 Getting Started (Local Development)
-
-### 1. Start the FastAPI Backend
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
+
+```
+
+### 2. Start the Next.js Frontend
+
+```bash
+# In a new terminal window
+cd frontend
+npm install
+npm run dev
+
+```
+
+Visit `http://localhost:3000` to access the Command Center.
+
+---
+
+## Product Roadmap
+
+* [x] Multi-Tool Workspace Architecture (Top Navigation)
+* [x] GC Content & Thermodynamics Dashboard
+* [ ] Restriction Mapping Engine: Linear timeline visualization for Enzyme cut sites.
+* [ ] 3D Protein Viewer: DNA-to-Amino-Acid translation with WebGL PDB structure rendering.
+
+```
+
+```
