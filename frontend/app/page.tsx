@@ -31,10 +31,17 @@ import {
   ExplainerAccordion,
   VariantCatalogModal,
   ClinicalTranslationCard,
+  Sidebar,
+  GCAnalyticsView,
+  RestrictionMappingView,
+  ProteinViewerView,
 } from "./components";
 
 // Import utilities
 import { generateDynamicVariant } from "./utils/genomics";
+
+// Import icons for mobile menu
+import { Menu } from "lucide-react";
 
 // =============================================================================
 // TYPES
@@ -657,6 +664,8 @@ export default function BioSyncCommandCenter() {
   const [currentJobId, setCurrentJobId] = useState<number | undefined>(undefined);
   const [accessionId, setAccessionId] = useState("");
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
+  const [activeView, setActiveView] = useState("alignment");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     fetchHistory();
@@ -782,7 +791,7 @@ ${mutatedSeq}`;
 
   return (
     <LayoutGroup>
-      <main className="min-h-screen bg-[#030303] text-white overflow-x-hidden">
+      <div className="min-h-screen bg-[#030303] text-white overflow-x-hidden flex">
         {/* Background Effects */}
         <ParticleField mouseX={mouseX} mouseY={mouseY} />
         <Scanline />
@@ -807,6 +816,24 @@ ${mutatedSeq}`;
           />
         </motion.div>
 
+        {/* Mobile Menu Button */}
+        <motion.button
+          onClick={() => setIsSidebarOpen(true)}
+          className="fixed top-4 left-4 z-40 lg:hidden p-2 rounded-lg bg-white/5 border border-white/10"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          <Menu className="w-5 h-5 text-white/70" />
+        </motion.button>
+
+        {/* Sidebar Navigation */}
+        <Sidebar
+          activeView={activeView}
+          setActiveView={setActiveView}
+          isMobileOpen={isSidebarOpen}
+          setIsMobileOpen={setIsSidebarOpen}
+        />
+
         {/* Variant Catalog Modal */}
         <VariantCatalogModal
           isOpen={isCatalogOpen}
@@ -814,9 +841,13 @@ ${mutatedSeq}`;
           onSelectVariant={handleCatalogSelect}
         />
 
-        {/* Content */}
-        <AnimatePresence mode="wait">
-          {view === "dropzone" ? (
+        {/* Main Content Area */}
+        <main className="flex-1 min-w-0 relative">
+          <AnimatePresence mode="wait">
+          {/* Alignment View */}
+          {activeView === "alignment" && (
+          <>
+            {view === "dropzone" ? (
             <motion.div
               key="dropzone"
               initial={{ opacity: 0 }}
@@ -918,25 +949,37 @@ ${mutatedSeq}`;
               <HistorySection jobs={history} onLoadJob={() => {}} />
             </motion.div>
           )}
-        </AnimatePresence>
 
-        {/* Footer */}
-        <footer className="px-6 md:px-12 lg:px-24 py-12 border-t border-white/5">
-          <div className="flex justify-between items-center">
-            <p className="text-white/30 font-mono text-xs">
-              BioSync Cinematic Command Center v2.0
-            </p>
-            <div className="flex items-center gap-2">
-              <motion.div
-                className="w-2 h-2 rounded-full bg-emerald-400"
-                animate={{ opacity: [1, 0.3, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
-              />
-              <span className="text-white/40 font-mono text-xs">System Online</span>
-            </div>
-          </div>
-        </footer>
-      </main>
+            {/* Alignment View Footer */}
+            <footer className="px-6 md:px-12 lg:px-24 py-12 border-t border-white/5">
+              <div className="flex justify-between items-center">
+                <p className="text-white/30 font-mono text-xs">
+                  BioSync Cinematic Command Center v2.0
+                </p>
+                <div className="flex items-center gap-2">
+                  <motion.div
+                    className="w-2 h-2 rounded-full bg-emerald-400"
+                    animate={{ opacity: [1, 0.3, 1] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  />
+                  <span className="text-white/40 font-mono text-xs">System Online</span>
+                </div>
+              </div>
+            </footer>
+          </>
+          )}
+
+          {/* GC Analytics Placeholder */}
+          {activeView === "gc-analytics" && <GCAnalyticsView />}
+
+          {/* Restriction Mapping Placeholder */}
+          {activeView === "restriction" && <RestrictionMappingView />}
+
+          {/* Protein Viewer Placeholder */}
+          {activeView === "protein" && <ProteinViewerView />}
+          </AnimatePresence>
+        </main>
+      </div>
     </LayoutGroup>
   );
 }
