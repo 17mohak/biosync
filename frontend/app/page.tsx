@@ -33,6 +33,9 @@ import {
   ClinicalTranslationCard,
 } from "./components";
 
+// Import utilities
+import { generateDynamicVariant } from "./utils/genomics";
+
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -267,24 +270,21 @@ const GenBankImport: React.FC<{
       if (!response.ok) throw new Error("Failed to fetch from NCBI");
       const data = await response.json();
       
-      // Extract the original sequence and create a synthetic variant
-      const originalFasta = data.fasta_text;
-      const lines = originalFasta.split('\n');
-      const header = lines[0]; // >accession description
-      const sequence = lines.slice(1).join('');
+      // 1. Parse and Slice
+      const lines = data.fasta_text.split('\n');
+      let seq = lines.slice(1).join('').replace(/\s/g, ''); 
+      if (seq.length > 1500) seq = seq.substring(0, 1500); // Keep CPU safeguard
+
+      // 2. Generate Dynamic Variant
+      const mutatedSeq = generateDynamicVariant(seq);
       
-      // 2. Create a Severe Synthetic Variant (Simulating a dangerous 15bp mutation cluster)
-      // We replace bases 50-65 with a jarring mismatch block to trigger the ML warning
-      const severeAnomaly = "TGACGGATCGATACA";
-      const mutatedSequence = sequence.substring(0, 50) + severeAnomaly + sequence.substring(65);
+      // 3. Construct FASTA
+      const dualFasta = `>Reference_WildType_${accessionId.trim()}
+${seq}
+>Detected_Variant_${accessionId.trim()}
+${mutatedSeq}`;
       
-      // Create a 2-sequence FASTA file
-      const syntheticFasta = `${header}
-${sequence}
->${accessionId.trim()}_VARIANT Synthetic mutated variant
-${mutatedSequence}`;
-      
-      onFetch(syntheticFasta);
+      onFetch(dualFasta);
     } catch (err: any) {
       setError(`Fetch failed: ${err.message}`);
     }
@@ -757,38 +757,21 @@ export default function BioSyncCommandCenter() {
       if (!response.ok) throw new Error("Failed to fetch from NCBI");
       const data = await response.json();
       
-      // Extract the original sequence and create a synthetic variant
-      const originalFasta = data.fasta_text;
-      const lines = originalFasta.split('\n');
-      const header = lines[0]; // >accession description
-      const sequence = lines.slice(1).join('');
+      // 1. Parse and Slice
+      const lines = data.fasta_text.split('\n');
+      let seq = lines.slice(1).join('').replace(/\s/g, ''); 
+      if (seq.length > 1500) seq = seq.substring(0, 1500); // Keep CPU safeguard
+
+      // 2. Generate Dynamic Variant
+      const mutatedSeq = generateDynamicVariant(seq);
       
-      // Create a synthetic mutated variant (~5% mutation rate)
-      const bases = ['A', 'T', 'C', 'G'];
-      let mutatedSequence = '';
-      for (let i = 0; i < sequence.length; i++) {
-        const base = sequence[i];
-        if (Math.random() < 0.05) {
-          // Mutate this base
-          const otherBases = bases.filter(b => b !== base.toUpperCase());
-          mutatedSequence += otherBases[Math.floor(Math.random() * otherBases.length)];
-        } else {
-          mutatedSequence += base;
-        }
-      }
+      // 3. Construct FASTA
+      const dualFasta = `>Reference_WildType_${accession}
+${seq}
+>Detected_Variant_${accession}
+${mutatedSeq}`;
       
-      // Create a 2-sequence FASTA file
-      const syntheticFasta = `${header}
-${sequence}
->${accession}_VARIANT Synthetic mutated variant
-${mutatedSequence}`;
-      
-      // Create a File object (required by runAnalysis)
-      const file = new File([syntheticFasta], `${accession}_paired.fasta`, { type: 'text/plain' });
-      
-      // Convert File to text for runAnalysis
-      const text = await file.text();
-      await runAnalysis(text);
+      await runAnalysis(dualFasta);
     } catch (err: any) {
       console.error("Catalog fetch error:", err);
       alert(`Fetch failed: ${err.message}`);
