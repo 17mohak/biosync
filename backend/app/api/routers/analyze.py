@@ -26,12 +26,17 @@ router = APIRouter(prefix="/api/analyze", tags=["Analysis"])
         "Returns a Confidence Score (0–100), Mutation Hotspots (clustered "
         "instability windows), GC content per sequence, a full "
         "per-position breakdown, and a clinical translation summary. "
-        "Note: position_breakdown is truncated for alignments > 100bp to prevent DOM overflow."
+        "Note: position_breakdown is truncated for alignments > 100bp to prevent DOM overflow. "
+        "Pass window_truncated=True if the alignment was from truncated sequences."
     ),
 )
 def stability_analysis(data: StabilityRequest) -> StabilityResponse:
     try:
-        result = analyze_alignment_stability(data.alignment_1, data.alignment_2)
+        result = analyze_alignment_stability(
+            data.alignment_1, 
+            data.alignment_2,
+            window_truncated=data.window_truncated,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

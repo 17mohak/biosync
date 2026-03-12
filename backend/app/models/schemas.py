@@ -44,6 +44,9 @@ class GlobalAlignmentResponse(BaseModel):
     algorithm: str = "needleman-wunsch"
     score_matrix: list[list[int]] = Field(default_factory=list, description="Scoring matrix (downsampled if large sequences)")
     matrix_compressed: bool = Field(False, description="True if score_matrix was downsampled to fit 100x100 max")
+    window_truncated: bool = Field(False, description="True if sequences were truncated to 1500bp for real-time performance")
+    original_length_seq1: Optional[int] = Field(None, description="Original length of sequence_1 before truncation")
+    original_length_seq2: Optional[int] = Field(None, description="Original length of sequence_2 before truncation")
 
 
 class LocalAlignmentResponse(BaseModel):
@@ -53,6 +56,9 @@ class LocalAlignmentResponse(BaseModel):
     algorithm: str = "smith-waterman"
     score_matrix: list[list[int]] = Field(default_factory=list, description="Scoring matrix (downsampled if large sequences)")
     matrix_compressed: bool = Field(False, description="True if score_matrix was downsampled to fit 100x100 max")
+    window_truncated: bool = Field(False, description="True if sequences were truncated to 1500bp for real-time performance")
+    original_length_seq1: Optional[int] = Field(None, description="Original length of sequence_1 before truncation")
+    original_length_seq2: Optional[int] = Field(None, description="Original length of sequence_2 before truncation")
 
 
 # ---------------------------------------------------------------------------
@@ -184,10 +190,14 @@ class StabilityRequest(BaseModel):
         ...,
         description="Gapped aligned string 2, same length as alignment_1",
     )
+    window_truncated: bool = Field(
+        False,
+        description="True if sequences were truncated before alignment (from alignment response)",
+    )
 
     model_config = {
         "json_schema_extra": {
-            "examples": [{"alignment_1": "ACG-TACGT", "alignment_2": "ACGTTAC-T"}]
+            "examples": [{"alignment_1": "ACG-TACGT", "alignment_2": "ACGTTAC-T", "window_truncated": False}]
         }
     }
 

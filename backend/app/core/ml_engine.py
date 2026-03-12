@@ -169,6 +169,7 @@ def _generate_clinical_translation(
     mismatch_count: int,
     gap_count: int,
     total_positions: int,
+    window_truncated: bool = False,
 ) -> str:
     """
     Generate a layman-friendly clinical translation of the stability analysis.
@@ -188,12 +189,25 @@ def _generate_clinical_translation(
         Number of gaps in alignment
     total_positions : int
         Total alignment length
+    window_truncated : bool
+        If True, sequences were truncated before alignment (targeted window analysis)
     
     Returns
     -------
     str
-        A 2-3 sentence layman summary
+        A 2-3 sentence layman summary with optional warning prepend
     """
+    # Build the warning prepend if window was truncated
+    warning_prepend = ""
+    if window_truncated:
+        warning_prepend = (
+            "⚠️ TARGETED WINDOW ANALYSIS: Sequence exceeds computational limits for "
+            "real-time dynamic programming. Analysis has been targeted to the first "
+            "1,500 base pairs, simulating a focused examination of a critical genomic region "
+            "(analogous to analyzing the Spike Protein region of a viral genome). "
+            "Results reflect this targeted window only. "
+        )
+    
     # Determine overall stability category
     if confidence_score >= 90:
         stability_level = "excellent"
@@ -292,7 +306,7 @@ def _generate_clinical_translation(
                 f"no concentrated mutation hotspots were detected."
             )
     
-    return " ".join(sentences)
+    return warning_prepend + " ".join(sentences)
 
 
 # ---------------------------------------------------------------------------
@@ -302,6 +316,7 @@ def _generate_clinical_translation(
 def analyze_alignment_stability(
     alignment_1: str,
     alignment_2: str,
+    window_truncated: bool = False,
 ) -> StabilityResult:
     """
     Compute a stability / mutation-risk analysis for a pairwise alignment.
@@ -310,6 +325,9 @@ def analyze_alignment_stability(
     ----------
     alignment_1, alignment_2:
         Gapped aligned strings of equal length (output of NW or SW).
+    window_truncated:
+        If True, indicates the alignment was performed on truncated sequences
+        (targeted window analysis mode).
 
     Raises
     ------
@@ -376,6 +394,7 @@ def analyze_alignment_stability(
         mismatch_count=mismatch_count,
         gap_count=gap_count,
         total_positions=len(breakdown),
+        window_truncated=window_truncated,
     )
 
     return StabilityResult(
