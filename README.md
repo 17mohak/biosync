@@ -83,15 +83,6 @@ npm run dev
 | `/api/history` | GET | List job history |
 | `/api/export/{id}` | GET | Download PDF report |
 
-## The Experience
-
-> "If it looks like an AI template, throw it away."
-
-- Spring physics (stiffness: 150, damping: 20) on all interactions
-- No rounded cards—data floats in space
-- backdrop-blur-3xl with border-white/5 only when needed
-- Neural trace paths that follow your cursor through the matrix
-- High-frequency vibration on mutation hotspots
 
 ## License
 
