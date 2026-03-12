@@ -11,7 +11,7 @@ export { ExplainerAccordion } from "./ExplainerAccordion";
 export { VariantCatalogModal } from "./VariantCatalogModal";
 export { Navigation } from "./Navigation";
 export { ClinicalTranslationCard } from "./ClinicalTranslationCard";
-export { Sidebar } from "./Sidebar";
+export { TopNav } from "./TopNav";
 export { GCAnalyticsView } from "./GCAnalyticsView";
 export { RestrictionMappingView, ProteinViewerView } from "./PlaceholderViews";
 
@@ -25,5 +25,5 @@ export { default as ExplainerAccordionDefault } from "./ExplainerAccordion";
 export { default as VariantCatalogModalDefault } from "./VariantCatalogModal";
 export { default as NavigationDefault } from "./Navigation";
 export { default as ClinicalTranslationCardDefault } from "./ClinicalTranslationCard";
-export { default as SidebarDefault } from "./Sidebar";
+export { default as TopNavDefault } from "./TopNav";
 export { default as PlaceholderViewsDefault } from "./PlaceholderViews";

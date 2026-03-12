@@ -31,7 +31,7 @@ import {
   ExplainerAccordion,
   VariantCatalogModal,
   ClinicalTranslationCard,
-  Sidebar,
+  TopNav,
   GCAnalyticsView,
   RestrictionMappingView,
   ProteinViewerView,
@@ -40,8 +40,7 @@ import {
 // Import utilities
 import { generateDynamicVariant } from "./utils/genomics";
 
-// Import icons for mobile menu
-import { Menu } from "lucide-react";
+
 
 // =============================================================================
 // TYPES
@@ -665,7 +664,6 @@ export default function BioSyncCommandCenter() {
   const [accessionId, setAccessionId] = useState("");
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
   const [activeView, setActiveView] = useState("alignment");
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     fetchHistory();
@@ -791,7 +789,7 @@ ${mutatedSeq}`;
 
   return (
     <LayoutGroup>
-      <div className="flex h-screen w-full overflow-hidden bg-[#030303] text-white">
+      <div className="flex flex-col min-h-screen bg-[#030303] text-white">
         {/* Background Effects */}
         <ParticleField mouseX={mouseX} mouseY={mouseY} />
         <Scanline />
@@ -816,23 +814,8 @@ ${mutatedSeq}`;
           />
         </motion.div>
 
-        {/* Mobile Menu Button */}
-        <motion.button
-          onClick={() => setIsSidebarOpen(true)}
-          className="fixed top-4 left-4 z-40 lg:hidden p-2 rounded-lg bg-white/5 border border-white/10"
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-        >
-          <Menu className="w-5 h-5 text-white/70" />
-        </motion.button>
-
-        {/* Sidebar Navigation */}
-        <Sidebar
-          activeView={activeView}
-          setActiveView={setActiveView}
-          isMobileOpen={isSidebarOpen}
-          setIsMobileOpen={setIsSidebarOpen}
-        />
+        {/* Top Navigation */}
+        <TopNav activeView={activeView} setActiveView={setActiveView} />
 
         {/* Variant Catalog Modal */}
         <VariantCatalogModal
@@ -842,7 +825,7 @@ ${mutatedSeq}`;
         />
 
         {/* Main Content Area */}
-        <main className="flex-1 h-full overflow-y-auto overflow-x-hidden relative">
+        <main className="flex-1 max-w-7xl mx-auto w-full p-6">
           <AnimatePresence mode="wait">
           {/* Alignment View */}
           {activeView === "alignment" && (

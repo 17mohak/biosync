@@ -10,7 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { PieChart, Flame, Dna, Activity, Loader2, AlertCircle } from "lucide-react";
+import { PieChart, Flame, Dna, Activity, Loader2, AlertCircle, Sparkles, Info } from "lucide-react";
 
 // =============================================================================
 // TYPES
@@ -403,7 +403,7 @@ export const GCAnalyticsView: React.FC<GCAnalyticsViewProps> = ({ sequence }) =>
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={data?.sliding_window || []}
-              margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+              margin={{ top: 20, right: 30, left: 0, bottom: 40 }}
             >
               <defs>
                 <linearGradient id="gcGradient" x1="0" y1="0" x2="0" y2="1">
@@ -419,10 +419,11 @@ export const GCAnalyticsView: React.FC<GCAnalyticsViewProps> = ({ sequence }) =>
                 tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 12, fontFamily: "monospace" }}
                 tickLine={false}
                 axisLine={{ stroke: "rgba(255,255,255,0.1)" }}
+                tickMargin={10}
                 label={{ 
                   value: "Sequence Position", 
                   position: "insideBottom", 
-                  offset: -5,
+                  offset: -25,
                   fill: "rgba(255,255,255,0.3)",
                   fontSize: 12,
                   fontFamily: "monospace"
