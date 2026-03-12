@@ -43,6 +43,7 @@ class GlobalAlignmentResponse(BaseModel):
     optimal_score: int
     algorithm: str = "needleman-wunsch"
     score_matrix: list[list[int]] = Field(default_factory=list, description="Full scoring matrix for visualization")
+    matrix_truncated: bool = Field(False, description="True if score_matrix was omitted due to size")
 
 
 class LocalAlignmentResponse(BaseModel):
@@ -51,6 +52,7 @@ class LocalAlignmentResponse(BaseModel):
     local_score: int
     algorithm: str = "smith-waterman"
     score_matrix: list[list[int]] = Field(default_factory=list, description="Full scoring matrix for visualization")
+    matrix_truncated: bool = Field(False, description="True if score_matrix was omitted due to size")
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +118,15 @@ class FastaRecordOut(BaseModel):
 class FastaResponse(BaseModel):
     record_count: int
     records: list[FastaRecordOut]
+
+
+# ---------------------------------------------------------------------------
+# NCBI schemas
+# ---------------------------------------------------------------------------
+
+class NCBIFetchResponse(BaseModel):
+    accession_id: str
+    fasta_text: str
 
 
 # ---------------------------------------------------------------------------

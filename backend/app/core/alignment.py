@@ -12,12 +12,14 @@ independently from the HTTP layer.
 from __future__ import annotations
 
 import numpy as np
+from functools import lru_cache
 
 
 # ---------------------------------------------------------------------------
 # Needleman-Wunsch — global alignment
 # ---------------------------------------------------------------------------
 
+@lru_cache(maxsize=128)
 def needleman_wunsch(
     seq1: str,
     seq2: str,
@@ -81,11 +83,19 @@ def needleman_wunsch(
     while j > 0:
         align1.append("-"); align2.append(seq2[j - 1]); j -= 1
 
+    if len(seq1) > 200 or len(seq2) > 200:
+        score_matrix_out = []
+        matrix_truncated = True
+    else:
+        score_matrix_out = score.tolist()
+        matrix_truncated = False
+
     return {
         "alignment_1":   "".join(reversed(align1)),
         "alignment_2":   "".join(reversed(align2)),
         "optimal_score": int(score[n, m]),
-        "score_matrix":  score.tolist(),
+        "score_matrix":  score_matrix_out,
+        "matrix_truncated": matrix_truncated,
         "algorithm":     "needleman-wunsch",
     }
 
@@ -94,6 +104,7 @@ def needleman_wunsch(
 # Smith-Waterman — local alignment
 # ---------------------------------------------------------------------------
 
+@lru_cache(maxsize=128)
 def smith_waterman(
     seq1: str,
     seq2: str,
@@ -154,10 +165,18 @@ def smith_waterman(
             align2.append(seq2[j - 1])
             j -= 1
 
+    if len(seq1) > 200 or len(seq2) > 200:
+        score_matrix_out = []
+        matrix_truncated = True
+    else:
+        score_matrix_out = score.tolist()
+        matrix_truncated = False
+
     return {
         "local_alignment_1": "".join(reversed(align1)),
         "local_alignment_2": "".join(reversed(align2)),
         "local_score":       best_score,
-        "score_matrix":      score.tolist(),
+        "score_matrix":      score_matrix_out,
+        "matrix_truncated":  matrix_truncated,
         "algorithm":         "smith-waterman",
     }

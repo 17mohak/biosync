@@ -95,6 +95,15 @@ def _make_styles() -> dict:
             backColor=colors.HexColor("#eef5ee"),
             leftIndent=6,
         ),
+        "subsection": ParagraphStyle(
+            "Subsection",
+            parent=base["Heading3"],
+            textColor=_BRAND_COLOR,
+            fontSize=10,
+            spaceBefore=8,
+            spaceAfter=2,
+            fontName="Helvetica-Bold",
+        ),
     }
 
 
@@ -165,6 +174,80 @@ def _json_section(data: dict, styles: dict, label: str) -> list:
     return flowables
 
 
+def _results_section(data: dict, styles: dict, label: str) -> list:
+    """Format the results section cleanly, filtering large arrays and showing alignment visual."""
+    if not data:
+        return [Paragraph("(empty)", styles["body"])]
+
+    flowables = [Paragraph(label, styles["section"])]
+    
+    # Filter out score_matrix and position_breakdown
+    filtered = {k: v for k, v in data.items() if k not in ("score_matrix", "position_breakdown")}
+    
+    # 1. Clean Summary
+    summary_lines = []
+    if "optimal_score" in filtered:
+        summary_lines.append(f"<b>Global Score:</b> {filtered.pop('optimal_score')}")
+    if "local_score" in filtered:
+        summary_lines.append(f"<b>Local Score:</b> {filtered.pop('local_score')}")
+    if "confidence_score" in filtered:
+        summary_lines.append(f"<b>Confidence Score:</b> {filtered.pop('confidence_score')}")
+    if "gc_content_seq1" in filtered:
+        summary_lines.append(f"<b>GC Content (Seq 1):</b> {filtered.pop('gc_content_seq1')}")
+    if "gc_content_seq2" in filtered:
+        summary_lines.append(f"<b>GC Content (Seq 2):</b> {filtered.pop('gc_content_seq2')}")
+        
+    if summary_lines:
+        flowables.append(Paragraph("<br/>".join(summary_lines), styles["body"]))
+        flowables.append(Spacer(1, 0.3 * cm))
+        
+    # 2. Sequence Alignment Visual
+    seq1 = filtered.pop("alignment_1", filtered.pop("local_alignment_1", None))
+    seq2 = filtered.pop("alignment_2", filtered.pop("local_alignment_2", None))
+    
+    if seq1 and seq2:
+        seq1 = str(seq1)
+        seq2 = str(seq2)
+        flowables.append(Paragraph("Sequence Alignment", styles["subsection"]))
+        chunk_size = 60
+        mono_lines = []
+        for i in range(0, max(len(seq1), len(seq2)), chunk_size):
+            s1_chunk = seq1[i:i+chunk_size]
+            s2_chunk = seq2[i:i+chunk_size]
+            mono_lines.append(f"Seq 1: {s1_chunk}")
+            mono_lines.append(f"Seq 2: {s2_chunk}")
+            mono_lines.append("")
+        
+        if mono_lines and not mono_lines[-1]:
+            mono_lines.pop()
+            
+        safe_mono = "\n".join(mono_lines).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        flowables.append(Paragraph(safe_mono.replace("\n", "<br/>"), styles["mono"]))
+        flowables.append(Spacer(1, 0.3 * cm))
+        
+    # 3. Mutation Summary
+    if "mutation_hotspots" in data:
+        flowables.append(Paragraph("Mutation Summary", styles["subsection"]))
+        hotspots = filtered.pop("mutation_hotspots", [])
+        if not hotspots:
+            flowables.append(Paragraph("Status: Highly Stable - No Hotspots Detected.", styles["body"]))
+        else:
+            hotspot_lines = [json.dumps(h, ensure_ascii=False) for h in hotspots]
+            safe_hotspots = "<br/>".join(hotspot_lines).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            flowables.append(Paragraph(safe_hotspots, styles["mono"]))
+        flowables.append(Spacer(1, 0.3 * cm))
+
+    # 4. Any remaining output goes as JSON
+    if filtered:
+        flowables.append(Paragraph("Additional Details", styles["subsection"]))
+        formatted = json.dumps(filtered, indent=2, ensure_ascii=False)
+        safe = formatted.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        lines = "\n".join(line[:120] for line in safe.split("\n"))
+        flowables.append(Paragraph(lines.replace("\n", "<br/>"), styles["mono"]))
+        
+    return flowables
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -211,7 +294,7 @@ def generate_job_pdf(record) -> bytes:
     story.append(HRFlowable(width="100%", thickness=0.5, color=_ACCENT_COLOR))
 
     # 4. Results
-    story.extend(_json_section(record.get_result(), styles, "Results"))
+    story.extend(_results_section(record.get_result(), styles, "Results"))
     story.append(Spacer(1, 0.5 * cm))
 
     # Footer note

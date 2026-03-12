@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   motion,
   useSpring,
@@ -8,10 +8,29 @@ import {
   useScroll,
   useTransform,
   AnimatePresence,
-  useAnimation,
   LayoutGroup,
 } from "framer-motion";
-import { Download, Dna, Sparkles, History, ChevronRight, Zap, Activity, Microscope } from "lucide-react";
+import {
+  Dna,
+  History,
+  ChevronRight,
+  Microscope,
+  Database,
+  Loader2,
+  Play,
+  Globe,
+  BookOpen,
+} from "lucide-react";
+
+// Import components
+import {
+  StabilityHeatmap,
+  MatrixContainer,
+  DownloadReportButton,
+  DNASequenceStream,
+  ExplainerAccordion,
+  VariantCatalogModal,
+} from "./components";
 
 // =============================================================================
 // TYPES
@@ -107,7 +126,7 @@ function useScrollParallax() {
 }
 
 // =============================================================================
-// PARTICLE BACKGROUND (Client-only)
+// PARTICLE BACKGROUND
 // =============================================================================
 
 interface ParticleData {
@@ -124,7 +143,6 @@ const ParticleField: React.FC<{ mouseX: any; mouseY: any }> = ({ mouseX, mouseY 
 
   useEffect(() => {
     setIsClient(true);
-    // Generate particles only on client to avoid hydration mismatch
     const newParticles = Array.from({ length: 50 }, (_, i) => ({
       id: i,
       x: Math.random() * 100,
@@ -135,10 +153,7 @@ const ParticleField: React.FC<{ mouseX: any; mouseY: any }> = ({ mouseX, mouseY 
     setParticles(newParticles);
   }, []);
 
-  // Don't render anything during SSR
-  if (!isClient || particles.length === 0) {
-    return null;
-  }
+  if (!isClient || particles.length === 0) return null;
 
   return (
     <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
@@ -171,31 +186,26 @@ const Particle: React.FC<{
       const screenY = (y / 100) * window.innerHeight;
       const diffX = screenX - latestX;
       const diffY = screenY - latestY;
-      
+
       let newX = x;
       let newY = y;
-      
-      if (Math.abs(diffX) < 150) {
-        newX = x + (diffX / 150) * 8;
-      }
-      if (Math.abs(diffY) < 150) {
-        newY = y + (diffY / 150) * 8;
-      }
-      
+
+      if (Math.abs(diffX) < 150) newX = x + (diffX / 150) * 8;
+      if (Math.abs(diffY) < 150) newY = y + (diffY / 150) * 8;
+
       positionX.set(newX);
       positionY.set(newY);
     };
 
     const unsubscribeX = mouseX.on("change", handleMouseMove);
     const unsubscribeY = mouseY.on("change", handleMouseMove);
-    
+
     return () => {
       unsubscribeX();
       unsubscribeY();
     };
   }, [mouseX, mouseY, x, y, positionX, positionY]);
 
-  // Use transform to convert percentage to vw/vh units for smoother animation
   const leftPos = useTransform(springX, (v) => `${v}vw`);
   const topPos = useTransform(springY, (v) => `${v}vh`);
 
@@ -204,15 +214,8 @@ const Particle: React.FC<{
       className="absolute rounded-full bg-white/20"
       initial={{ opacity: 0 }}
       animate={{ opacity: [0.15, 0.4, 0.15] }}
-      transition={{
-        opacity: { duration: 4, repeat: Infinity, delay },
-      }}
-      style={{
-        left: leftPos,
-        top: topPos,
-        width: size,
-        height: size,
-      }}
+      transition={{ opacity: { duration: 4, repeat: Infinity, delay } }}
+      style={{ left: leftPos, top: topPos, width: size, height: size }}
     />
   );
 };
@@ -232,391 +235,85 @@ const Scanline: React.FC = () => {
     >
       <motion.div
         className="absolute left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-400/20 to-transparent"
-        animate={{
-          top: ["0%", "100%"],
-        }}
-        transition={{
-          duration: 8,
-          repeat: Infinity,
-          ease: "linear",
-        }}
+        animate={{ top: ["0%", "100%"] }}
+        transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
       />
     </motion.div>
   );
 };
 
 // =============================================================================
-// KINETIC MATRIX (Smith-Waterman Visualization)
+// GENBANK IMPORT COMPONENT
 // =============================================================================
 
-const KineticMatrix: React.FC<{
-  matrix: number[][];
-  seq1: string;
-  seq2: string;
-  hoveredCell: { i: number; j: number } | null;
-  onHoverCell: (cell: { i: number; j: number } | null) => void;
-}> = ({ matrix, seq1, seq2, hoveredCell, onHoverCell }) => {
-  const maxVal = Math.max(...matrix.flat());
-  const minVal = Math.min(...matrix.flat().filter((v) => v > 0));
+const GenBankImport: React.FC<{
+  accessionId: string;
+  setAccessionId: (id: string) => void;
+  onFetch: (fastaText: string) => void;
+  isLoading: boolean;
+}> = ({ accessionId, setAccessionId, onFetch, isLoading }) => {
+  const [error, setError] = useState<string | null>(null);
 
-  // Calculate optimal path from a cell
-  const calculatePath = (startI: number, startJ: number): Array<{ i: number; j: number }> => {
-    const path: Array<{ i: number; j: number }> = [];
-    let i = startI;
-    let j = startJ;
+  const handleFetch = async () => {
+    if (!accessionId.trim()) return;
+    setError(null);
 
-    while (i > 0 && j > 0 && matrix[i][j] > 0) {
-      path.push({ i, j });
-      const current = matrix[i][j];
-      const diag = matrix[i - 1]?.[j - 1] ?? -1;
-      const up = matrix[i - 1]?.[j] ?? -1;
-      const left = matrix[i]?.[j - 1] ?? -1;
-
-      const diagScore = i > 0 && j > 0 ? (seq1[i - 1] === seq2[j - 1] ? 1 : -1) : -999;
-
-      if (diag >= up && diag >= left && current === diag + diagScore) {
-        i--; j--;
-      } else if (up >= left && current === up - 2) {
-        i--;
-      } else if (current === left - 2) {
-        j--;
-      } else {
-        break;
-      }
+    try {
+      const response = await fetch(`http://localhost:8000/api/ncbi/fetch/${accessionId.trim()}`);
+      if (!response.ok) throw new Error("Failed to fetch from NCBI");
+      const data = await response.json();
+      onFetch(data.fasta_text);
+    } catch (err) {
+      setError("Failed to fetch sequence. Please check the accession ID.");
     }
-    return path;
-  };
-
-  const pathCells = hoveredCell ? calculatePath(hoveredCell.i, hoveredCell.j) : [];
-  const pathSet = new Set(pathCells.map((p) => `${p.i}-${p.j}`));
-
-  // Limit display
-  const displayRows = Math.min(matrix.length, 16);
-  const displayCols = Math.min(matrix[0]?.length || 0, 20);
-
-  return (
-    <div className="relative">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <Activity className="w-4 h-4 text-violet-400" />
-          <span className="text-xs font-mono text-white/40 uppercase tracking-widest">
-            Scoring Matrix
-          </span>
-        </div>
-        <span className="text-xs font-mono text-white/30">
-          Max Score: {maxVal}
-        </span>
-      </div>
-
-      <div className="overflow-x-auto pb-2">
-        <div
-          className="inline-grid gap-[2px]"
-          style={{
-            gridTemplateColumns: `repeat(${displayCols}, minmax(24px, 1fr))`,
-          }}
-        >
-          {matrix.slice(0, displayRows).map((row, i) =>
-            row.slice(0, displayCols).map((val, j) => {
-              const intensity = maxVal > 0 ? (val - minVal) / (maxVal - minVal) : 0;
-              const isInPath = pathSet.has(`${i}-${j}`);
-              const isHovered = hoveredCell?.i === i && hoveredCell?.j === j;
-
-              return (
-                <motion.div
-                  key={`${i}-${j}`}
-                  layoutId={`cell-${i}-${j}`}
-                  initial={{ opacity: 0, scale: 0 }}
-                  animate={{
-                    opacity: 1,
-                    scale: isHovered ? 1.3 : isInPath ? 1.1 : 1,
-                    backgroundColor: isInPath
-                      ? "rgba(34, 211, 238, 0.6)"
-                      : val > 0
-                      ? `rgba(167, 139, 250, ${0.1 + intensity * 0.5})`
-                      : "rgba(255,255,255,0.03)",
-                  }}
-                  transition={{
-                    delay: (i * displayCols + j) * 0.003,
-                    type: "spring",
-                    stiffness: 300,
-                    damping: 25,
-                  }}
-                  onMouseEnter={() => onHoverCell({ i, j })}
-                  onMouseLeave={() => onHoverCell(null)}
-                  className={`
-                    aspect-square flex items-center justify-center
-                    text-[9px] font-mono cursor-crosshair
-                    ${isInPath ? "text-white font-bold z-10" : val > 0 ? "text-white/50" : "text-white/20"}
-                  `}
-                  style={{
-                    boxShadow: isInPath
-                      ? "0 0 15px rgba(34, 211, 238, 0.8), inset 0 0 10px rgba(34, 211, 238, 0.4)"
-                      : isHovered
-                      ? "0 0 10px rgba(167, 139, 250, 0.6)"
-                      : val > maxVal * 0.8
-                      ? `0 0 ${val * 0.3}px rgba(167, 139, 250, ${0.3 + intensity * 0.4})`
-                      : "none",
-                  }}
-                >
-                  {val > 0 ? val : ""}
-                </motion.div>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      {/* Neural Trace Line */}
-      <AnimatePresence>
-        {pathCells.length > 0 && (
-          <svg
-            className="absolute inset-0 pointer-events-none overflow-visible"
-            style={{ width: "100%", height: "100%" }}
-          >
-            <motion.path
-              d={pathCells
-                .map((p, idx) => {
-                  const x = p.j * 26 + 12;
-                  const y = p.i * 26 + 12;
-                  return `${idx === 0 ? "M" : "L"} ${x} ${y}`;
-                })
-                .join(" ")}
-              fill="none"
-              stroke="url(#gradient)"
-              strokeWidth="2"
-              initial={{ pathLength: 0, opacity: 0 }}
-              animate={{ pathLength: 1, opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.4, ease: "easeOut" }}
-            />
-            <defs>
-              <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#22d3ee" />
-                <stop offset="100%" stopColor="#a78bfa" />
-              </linearGradient>
-            </defs>
-          </svg>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
-
-// =============================================================================
-// MUTATION HEATMAP
-// =============================================================================
-
-const MutationHeatmap: React.FC<{
-  positionBreakdown: StabilityResult["position_breakdown"];
-  hotspots: StabilityResult["mutation_hotspots"];
-}> = ({ positionBreakdown, hotspots }) => {
-  const maxInstability = Math.max(...positionBreakdown.map((p) => p.instability), 0.1);
-
-  const getColor = (type: string, instability: number) => {
-    const intensity = instability / maxInstability;
-    if (type === "match") {
-      return `rgba(52, 211, 153, ${0.3 + intensity * 0.7})`; // Emerald
-    } else if (type === "mismatch") {
-      return `rgba(251, 113, 133, ${0.4 + intensity * 0.6})`; // Crimson
-    }
-    return `rgba(255, 255, 255, ${0.1 + intensity * 0.3})`;
   };
 
   return (
-    <div className="mt-8">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <Zap className="w-4 h-4 text-amber-400" />
-          <span className="text-xs font-mono text-white/40 uppercase tracking-widest">
-            Instability Heatmap
-          </span>
-        </div>
-        <div className="flex items-center gap-2 text-xs">
-          <span className="w-3 h-3 rounded bg-emerald-400/50" />
-          <span className="text-white/30">Stable</span>
-          <span className="w-3 h-3 rounded bg-rose-400/50 ml-2" />
-          <span className="text-white/30">Unstable</span>
-        </div>
-      </div>
-
-      <div className="relative h-8 bg-white/5 rounded-sm overflow-hidden">
-        <div className="absolute inset-0 flex">
-          {positionBreakdown.map((pos, i) => {
-            const isHotspot = hotspots.some((h) => i >= h.start && i < h.end);
-
-            return (
-              <motion.div
-                key={i}
-                className="flex-1 origin-bottom"
-                initial={{ scaleY: 0 }}
-                animate={{
-                  scaleY: 1,
-                  backgroundColor: getColor(pos.position_type, pos.instability),
-                }}
-                transition={{
-                  delay: i * 0.003,
-                  type: "spring",
-                  stiffness: 200,
-                  damping: 20,
-                }}
-              >
-                {isHotspot && (
-                  <motion.div
-                    className="w-full h-full"
-                    animate={{
-                      opacity: [0.5, 1, 0.5],
-                      x: [-0.5, 0.5, -0.5],
-                    }}
-                    transition={{
-                      duration: 0.15,
-                      repeat: Infinity,
-                      ease: "linear",
-                    }}
-                    style={{
-                      background: "linear-gradient(90deg, transparent, rgba(251,113,133,0.5), transparent)",
-                    }}
-                  />
-                )}
-              </motion.div>
-            );
-          })}
-        </div>
-
-        {/* Hotspot markers */}
-        {hotspots.map((hotspot, idx) => {
-          const left = (hotspot.start / positionBreakdown.length) * 100;
-          const width = ((hotspot.end - hotspot.start) / positionBreakdown.length) * 100;
-          return (
-            <motion.div
-              key={idx}
-              className="absolute top-0 bottom-0 border-x border-rose-400/50"
-              style={{ left: `${left}%`, width: `${width}%` }}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 + idx * 0.1 }}
-            >
-              <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] font-mono text-rose-400 whitespace-nowrap">
-                HOTSPOT
-              </div>
-            </motion.div>
-          );
-        })}
-      </div>
-
-      <div className="flex justify-between mt-2 text-xs font-mono text-white/30">
-        <span>5&apos;</span>
-        <span>{positionBreakdown.length} bp</span>
-        <span>3&apos;</span>
-      </div>
-    </div>
-  );
-};
-
-// =============================================================================
-// DNA BASE COMPONENT
-// =============================================================================
-
-const DNABase: React.FC<{
-  base: string;
-  index: number;
-  isMatch?: boolean;
-  isGap?: boolean;
-  isMismatch?: boolean;
-  isHotspot?: boolean;
-  onHover?: () => void;
-  onLeave?: () => void;
-}> = ({ base, index, isMatch, isGap, isMismatch, isHotspot, onHover, onLeave }) => {
-  const baseColors: Record<string, string> = {
-    A: "text-cyan-400",
-    T: "text-violet-400",
-    U: "text-violet-400",
-    G: "text-emerald-400",
-    C: "text-amber-400",
-    "-": "text-white/20",
-  };
-
-  return (
-    <motion.span
-      initial={{ opacity: 0, y: 20, scale: 0.5 }}
-      animate={{
-        opacity: 1,
-        y: 0,
-        scale: 1,
-        x: isHotspot ? [0, -1, 1, 0] : 0,
-      }}
-      transition={{
-        opacity: { delay: index * 0.008, duration: 0.2 },
-        y: { delay: index * 0.008, type: "spring", stiffness: 300, damping: 20 },
-        scale: { delay: index * 0.008, type: "spring", stiffness: 300, damping: 20 },
-        x: isHotspot ? { duration: 0.1, repeat: Infinity, repeatDelay: 0.5 } : undefined,
-      }}
-      onMouseEnter={onHover}
-      onMouseLeave={onLeave}
-      className={`
-        inline-block font-mono text-sm md:text-base cursor-default
-        ${baseColors[base.toUpperCase()] || "text-white/60"}
-        ${isMatch ? "drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]" : ""}
-        ${isGap ? "text-white/30" : ""}
-        ${isMismatch ? "text-rose-400 drop-shadow-[0_0_12px_rgba(251,113,133,0.9)]" : ""}
-        ${isHotspot ? "font-bold" : ""}
-        transition-all duration-200
-        hover:scale-125 hover:z-10
-        mix-blend-screen
-      `}
-      style={{ willChange: "transform" }}
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.3 }}
+      className="bg-white/[0.02] backdrop-blur-sm border border-white/10 p-4"
     >
-      {base}
-    </motion.span>
-  );
-};
-
-// =============================================================================
-// DNA SEQUENCE STREAM
-// =============================================================================
-
-const DNASequenceStream: React.FC<{
-  sequence: string;
-  alignment?: string;
-  label: string;
-  hotspots: Array<{ start: number; end: number }>;
-  onHoverIndex: (index: number | null) => void;
-}> = ({ sequence, alignment, label, hotspots, onHoverIndex }) => {
-  const chars = sequence.split("");
-  const alignmentChars = alignment?.split("") || [];
-
-  const isHotspot = (i: number) => hotspots.some((h) => i >= h.start && i < h.end);
-
-  return (
-    <div className="mb-6 group">
-      <div className="flex items-center gap-3 mb-2">
-        <span className="text-xs font-mono text-white/40 uppercase tracking-widest w-24">
-          {label}
-        </span>
-        <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
-        <span className="text-xs font-mono text-white/30">{chars.length} bp</span>
+      <div className="flex items-center gap-2 mb-3">
+        <Globe className="w-4 h-4 text-violet-400" />
+        <span className="text-xs font-mono text-white/50 uppercase tracking-wider">Import from GenBank</span>
       </div>
-      <div className="flex flex-wrap gap-[2px] font-mono leading-relaxed pl-24">
-        {chars.map((char, i) => {
-          const isMatch = alignmentChars[i] && char === alignmentChars[i] && char !== "-";
-          const isGap = char === "-";
-          const isMismatch = alignmentChars[i] && char !== alignmentChars[i] && char !== "-" && alignmentChars[i] !== "-";
 
-          return (
-            <DNABase
-              key={`${label}-${i}`}
-              base={char}
-              index={i}
-              isMatch={isMatch}
-              isGap={isGap}
-              isMismatch={isMismatch}
-              isHotspot={isHotspot(i)}
-              onHover={() => onHoverIndex(i)}
-              onLeave={() => onHoverIndex(null)}
-            />
-          );
-        })}
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={accessionId}
+          onChange={(e) => setAccessionId(e.target.value)}
+          placeholder="e.g., NM_001302135.1"
+          className="flex-1 px-3 py-2 bg-white/5 border border-white/10 text-white text-sm font-mono placeholder:text-white/30 focus:border-cyan-500/50 focus:outline-none transition-colors"
+        />
+        <motion.button
+          onClick={handleFetch}
+          disabled={isLoading || !accessionId.trim()}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className="px-4 py-2 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 text-violet-300 text-sm font-mono disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+        >
+          {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+          Fetch
+        </motion.button>
       </div>
-    </div>
+
+      {error && (
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="mt-2 text-xs text-rose-400 font-mono"
+        >
+          {error}
+        </motion.p>
+      )}
+
+      <p className="mt-2 text-[10px] text-white/30 font-mono">
+        Enter a GenBank accession ID to fetch sequence data from NCBI
+      </p>
+    </motion.div>
   );
 };
 
@@ -671,9 +368,7 @@ const DropZone: React.FC<{
         <div className="flex items-center justify-between h-full px-6">
           <div className="flex items-center gap-4">
             <Microscope className="w-5 h-5 text-cyan-400" />
-            <span className="text-sm font-mono text-white/60">
-              Analysis Active
-            </span>
+            <span className="text-sm font-mono text-white/60">Analysis Active</span>
           </div>
           <button
             onClick={() => window.location.reload()}
@@ -696,14 +391,7 @@ const DropZone: React.FC<{
         borderColor: isDragging ? "rgba(34, 211, 238, 0.5)" : "rgba(255,255,255,0.08)",
         backgroundColor: isDragging ? "rgba(34, 211, 238, 0.03)" : "rgba(255,255,255,0.01)",
       }}
-      className="
-        relative border-2 border-dashed border-white/10
-        p-20 md:p-32
-        text-center
-        backdrop-blur-sm
-        cursor-pointer
-        overflow-hidden
-      "
+      className="relative border-2 border-dashed border-white/10 p-16 md:p-24 text-center backdrop-blur-sm cursor-pointer overflow-hidden"
     >
       <AnimatePresence>
         {shatterFragments.map((frag, i) => (
@@ -748,18 +436,15 @@ const DropZone: React.FC<{
 };
 
 // =============================================================================
-// SPATIAL DATA CANVAS
+// SPATIAL DATA CANVAS (Results View)
 // =============================================================================
 
 const SpatialDataCanvas: React.FC<{
   alignment: AlignmentResult;
   stability: StabilityResult | null;
   fastaRecords: FastaRecord[];
-  onSave: () => void;
-  isSaving: boolean;
-  saveSuccess: boolean;
-}> = ({ alignment, stability, fastaRecords, onSave, isSaving, saveSuccess }) => {
-  const [hoveredMatrixCell, setHoveredMatrixCell] = useState<{ i: number; j: number } | null>(null);
+  jobId?: number;
+}> = ({ alignment, stability, fastaRecords, jobId }) => {
   const [hoveredSeqIndex, setHoveredSeqIndex] = useState<number | null>(null);
 
   const seq1 = alignment.local_alignment_1 || alignment.alignment_1 || "";
@@ -790,48 +475,7 @@ const SpatialDataCanvas: React.FC<{
           </p>
         </div>
 
-        <motion.button
-          onClick={onSave}
-          disabled={isSaving}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className="
-            px-6 py-3
-            bg-cyan-500/10 hover:bg-cyan-500/20
-            border border-cyan-500/30 hover:border-cyan-500/50
-            text-cyan-300
-            font-mono text-sm
-            transition-all duration-300
-            flex items-center gap-2
-            disabled:opacity-50
-          "
-        >
-          <AnimatePresence mode="wait">
-            {saveSuccess ? (
-              <motion.span
-                key="success"
-                initial={{ opacity: 0, scale: 0 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex items-center gap-2"
-              >
-                <Sparkles className="w-4 h-4" />
-                Saved
-              </motion.span>
-            ) : (
-              <motion.span
-                key="save"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex items-center gap-2"
-              >
-                <Download className="w-4 h-4" />
-                Save Analysis
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </motion.button>
+        {jobId && <DownloadReportButton jobId={jobId} variant="premium" />}
       </div>
 
       {/* Main Grid */}
@@ -854,10 +498,12 @@ const SpatialDataCanvas: React.FC<{
               onHoverIndex={setHoveredSeqIndex}
             />
 
+            {/* ML Stability Ribbon */}
             {stability && (
-              <MutationHeatmap
+              <StabilityHeatmap
                 positionBreakdown={stability.position_breakdown}
                 hotspots={stability.mutation_hotspots}
+                confidenceScore={stability.confidence_score}
               />
             )}
           </div>
@@ -875,11 +521,16 @@ const SpatialDataCanvas: React.FC<{
                 { label: "Matches", value: stability.match_count, color: "text-emerald-400" },
                 { label: "Mismatches", value: stability.mismatch_count, color: "text-rose-400" },
                 { label: "Gaps", value: stability.gap_count, color: "text-amber-400" },
-              ].map((stat, i) => (
-                <div key={stat.label} className="bg-white/[0.02] border border-white/5 p-4">
+              ].map((stat) => (
+                <motion.div
+                  key={stat.label}
+                  className="bg-white/[0.02] border border-white/5 p-4"
+                  whileHover={{ scale: 1.02, borderColor: "rgba(255,255,255,0.1)" }}
+                  transition={{ type: "spring", stiffness: 400 }}
+                >
                   <p className="text-[10px] font-mono text-white/40 uppercase">{stat.label}</p>
                   <p className={`text-2xl font-light mt-1 ${stat.color}`}>{stat.value}</p>
-                </div>
+                </motion.div>
               ))}
             </motion.div>
           )}
@@ -888,12 +539,12 @@ const SpatialDataCanvas: React.FC<{
         {/* Right: Matrix */}
         <div className="lg:col-span-2">
           <div className="bg-white/[0.02] backdrop-blur-xl border border-white/5 p-6 sticky top-24">
-            <KineticMatrix
+            <MatrixContainer
               matrix={alignment.score_matrix}
               seq1={seq1}
               seq2={seq2}
-              hoveredCell={hoveredMatrixCell}
-              onHoverCell={setHoveredMatrixCell}
+              maxDisplayRows={20}
+              maxDisplayCols={24}
             />
           </div>
         </div>
@@ -911,27 +562,6 @@ const HistorySection: React.FC<{
   onLoadJob: (job: JobRecord) => void;
 }> = ({ jobs, onLoadJob }) => {
   const { y1, y2, y3, opacity } = useScrollParallax();
-  const [downloadSuccess, setDownloadSuccess] = useState<number | null>(null);
-
-  const handleDownload = async (jobId: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      const response = await fetch(`http://localhost:8000/api/export/${jobId}`);
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `job_${jobId}.pdf`;
-        a.click();
-        window.URL.revokeObjectURL(url);
-        setDownloadSuccess(jobId);
-        setTimeout(() => setDownloadSuccess(null), 2000);
-      }
-    } catch (error) {
-      console.error("Download failed:", error);
-    }
-  };
 
   return (
     <motion.section style={{ opacity }} className="mt-32 px-6 md:px-12 lg:px-24 pb-24">
@@ -970,16 +600,7 @@ const HistorySection: React.FC<{
             </div>
 
             <div className="flex items-center gap-4">
-              <button
-                onClick={(e) => handleDownload(job.id, e)}
-                className="p-2 rounded-full bg-white/5 hover:bg-cyan-500/20 border border-white/10 hover:border-cyan-500/50 transition-all"
-              >
-                {downloadSuccess === job.id ? (
-                  <Sparkles className="w-4 h-4 text-cyan-400" />
-                ) : (
-                  <Download className="w-4 h-4 text-white/60 group-hover:text-cyan-400" />
-                )}
-              </button>
+              <DownloadReportButton jobId={job.id} variant="minimal" />
               <ChevronRight className="w-5 h-5 text-white/20 group-hover:text-white/60 group-hover:translate-x-1 transition-all" />
             </div>
           </motion.div>
@@ -993,16 +614,17 @@ const HistorySection: React.FC<{
 // MAIN PAGE
 // =============================================================================
 
-export default function CinematicGenomicCommandCenter() {
+export default function BioSyncCommandCenter() {
   const { springX, springY, mouseX, mouseY } = useMouseSpotlight();
   const [fastaRecords, setFastaRecords] = useState<FastaRecord[]>([]);
   const [alignment, setAlignment] = useState<AlignmentResult | null>(null);
   const [stability, setStability] = useState<StabilityResult | null>(null);
   const [history, setHistory] = useState<JobRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [view, setView] = useState<"dropzone" | "analysis">("dropzone");
+  const [currentJobId, setCurrentJobId] = useState<number | undefined>(undefined);
+  const [accessionId, setAccessionId] = useState("");
+  const [isCatalogOpen, setIsCatalogOpen] = useState(false);
 
   useEffect(() => {
     fetchHistory();
@@ -1020,14 +642,14 @@ export default function CinematicGenomicCommandCenter() {
     }
   };
 
-  const handleFastaDrop = async (text: string) => {
+  const runAnalysis = async (fastaText: string) => {
     setIsLoading(true);
     try {
       // Parse FASTA
       const parseResponse = await fetch("http://localhost:8000/api/fasta/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fasta_text: text }),
+        body: JSON.stringify({ fasta_text: fastaText }),
       });
 
       if (!parseResponse.ok) throw new Error("Parse failed");
@@ -1063,7 +685,24 @@ export default function CinematicGenomicCommandCenter() {
         const stabilityData = await stabilityResponse.json();
         setStability(stabilityData);
 
-        // Transition to analysis view
+        // Save job
+        const saveResponse = await fetch("http://localhost:8000/api/history/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            job_type: alignData.algorithm === "smith-waterman" ? "local" : "global",
+            input_data: { sequences: parseData.records.map((r: FastaRecord) => r.id) },
+            result_data: { alignment: alignData, stability: stabilityData },
+            notes: "BioSync Command Center Analysis",
+          }),
+        });
+
+        if (saveResponse.ok) {
+          const saveData = await saveResponse.json();
+          setCurrentJobId(saveData.id);
+          fetchHistory();
+        }
+
         setView("analysis");
       }
     } catch (error) {
@@ -1073,31 +712,23 @@ export default function CinematicGenomicCommandCenter() {
     }
   };
 
-  const handleSaveJob = async () => {
-    if (!alignment) return;
-    setIsSaving(true);
+  const handleFastaDrop = async (text: string) => {
+    await runAnalysis(text);
+  };
 
+  const handleCatalogSelect = async (accession: string) => {
+    setAccessionId(accession);
+    // Fetch and run analysis
+    setIsLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/api/history/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          job_type: alignment.algorithm === "smith-waterman" ? "local" : "global",
-          input_data: { sequences: fastaRecords.map((r) => r.id) },
-          result_data: { alignment, stability },
-          notes: "Cinematic Command Center Analysis",
-        }),
-      });
-
-      if (response.ok) {
-        setSaveSuccess(true);
-        fetchHistory();
-        setTimeout(() => setSaveSuccess(false), 2000);
-      }
-    } catch (error) {
-      console.error("Save failed:", error);
+      const response = await fetch(`http://localhost:8000/api/ncbi/fetch/${accession}`);
+      if (!response.ok) throw new Error("Failed to fetch from NCBI");
+      const data = await response.json();
+      await runAnalysis(data.fasta_text);
+    } catch (err) {
+      console.error("Catalog fetch error:", err);
     } finally {
-      setIsSaving(false);
+      setIsLoading(false);
     }
   };
 
@@ -1121,11 +752,19 @@ export default function CinematicGenomicCommandCenter() {
           <div
             className="w-[800px] h-[800px] rounded-full"
             style={{
-              background: "radial-gradient(circle, rgba(34,211,238,0.12) 0%, rgba(167,139,250,0.06) 40%, transparent 70%)",
+              background:
+                "radial-gradient(circle, rgba(34,211,238,0.12) 0%, rgba(167,139,250,0.06) 40%, transparent 70%)",
               filter: "blur(60px)",
             }}
           />
         </motion.div>
+
+        {/* Variant Catalog Modal */}
+        <VariantCatalogModal
+          isOpen={isCatalogOpen}
+          onClose={() => setIsCatalogOpen(false)}
+          onSelectVariant={handleCatalogSelect}
+        />
 
         {/* Content */}
         <AnimatePresence mode="wait">
@@ -1137,7 +776,7 @@ export default function CinematicGenomicCommandCenter() {
               exit={{ opacity: 0, y: -100 }}
               transition={{ duration: 0.5 }}
             >
-              {/* Hero */}
+              {/* Hero Section */}
               <section className="relative px-6 md:px-12 lg:px-24 pt-32 pb-16">
                 <motion.div
                   initial={{ opacity: 0, y: 30 }}
@@ -1149,26 +788,63 @@ export default function CinematicGenomicCommandCenter() {
                     animate={{ y: [0, -8, 0] }}
                     transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
                   >
-                    Genomic
+                    Decoding the
                     <br />
                     <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-violet-400 to-emerald-400">
-                      Command Center
+                      Language of Life
                     </span>
                   </motion.h1>
                   <p className="mt-6 text-lg md:text-xl text-white/40 font-mono max-w-2xl">
-                    Advanced sequence alignment and mutation stability analysis powered by 
-                    Smith-Waterman algorithms and ML prediction models.
+                    Fetch real-world variants from GenBank or upload custom sequences. 
+                    Detect microscopic mutations and predict the impact of structural anomalies in real-time.
                   </p>
                 </motion.div>
               </section>
 
-              {/* Drop Zone */}
+              {/* Explainer Accordion */}
+              <section className="px-6 md:px-12 lg:px-24">
+                <ExplainerAccordion />
+              </section>
+
+              {/* Input Engine */}
               <section className="px-6 md:px-12 lg:px-24 mb-32">
-                <DropZone
-                  onDrop={handleFastaDrop}
-                  isLoading={isLoading}
-                  isDocked={false}
-                />
+                <div className="grid lg:grid-cols-3 gap-6">
+                  {/* Drop Zone */}
+                  <div className="lg:col-span-2">
+                    <DropZone onDrop={handleFastaDrop} isLoading={isLoading} isDocked={false} />
+                  </div>
+
+                  {/* Side Panel: GenBank + Browse Catalog */}
+                  <div className="space-y-4">
+                    <GenBankImport
+                      accessionId={accessionId}
+                      setAccessionId={setAccessionId}
+                      onFetch={handleFastaDrop}
+                      isLoading={isLoading}
+                    />
+                    
+                    {/* Browse Catalog Button */}
+                    <motion.button
+                      onClick={() => setIsCatalogOpen(true)}
+                      disabled={isLoading}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="w-full px-6 py-4 bg-gradient-to-r from-cyan-500/10 via-violet-500/10 to-emerald-500/10 hover:from-cyan-500/20 hover:via-violet-500/20 hover:to-emerald-500/20 border border-cyan-500/30 hover:border-violet-500/50 text-white font-mono text-sm tracking-wide transition-all flex items-center justify-center gap-3 group relative overflow-hidden"
+                    >
+                      <motion.div
+                        className="absolute inset-0 -translate-x-full"
+                        animate={{ translateX: ["0%", "200%"] }}
+                        transition={{ duration: 2, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}
+                        style={{
+                          background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)",
+                        }}
+                      />
+                      <BookOpen className="w-5 h-5 text-cyan-400 group-hover:text-violet-400 transition-colors" />
+                      <span className="relative z-10">Browse Catalog</span>
+                      <Play className="w-4 h-4 text-emerald-400" />
+                    </motion.button>
+                  </div>
+                </div>
               </section>
 
               {/* History */}
@@ -1188,9 +864,7 @@ export default function CinematicGenomicCommandCenter() {
                   alignment={alignment}
                   stability={stability}
                   fastaRecords={fastaRecords}
-                  onSave={handleSaveJob}
-                  isSaving={isSaving}
-                  saveSuccess={saveSuccess}
+                  jobId={currentJobId}
                 />
               )}
               <HistorySection jobs={history} onLoadJob={() => {}} />
@@ -1202,7 +876,7 @@ export default function CinematicGenomicCommandCenter() {
         <footer className="px-6 md:px-12 lg:px-24 py-12 border-t border-white/5">
           <div className="flex justify-between items-center">
             <p className="text-white/30 font-mono text-xs">
-              Cinematic Genomic Command Center v2.0
+              BioSync Cinematic Command Center v2.0
             </p>
             <div className="flex items-center gap-2">
               <motion.div
