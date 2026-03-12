@@ -70,6 +70,7 @@ class StabilityResult:
     mismatch_count: int
     gap_count:      int
     position_breakdown: list[PositionBreakdown]
+    breakdown_truncated: bool = False             # True if position_breakdown was omitted
 
 
 # ---------------------------------------------------------------------------
@@ -221,6 +222,15 @@ def analyze_alignment_stability(
     # ── Hotspot detection ───────────────────────────────────────────────────
     hotspots = _find_hotspots(instability_arr, breakdown)
 
+    # DOM SAFEGUARD: Truncate position_breakdown for alignments > 100bp
+    # to prevent catastrophic frontend memory issues with viral genomes
+    if len(a1) > 100:
+        breakdown_out = []
+        breakdown_truncated = True
+    else:
+        breakdown_out = breakdown
+        breakdown_truncated = False
+
     return StabilityResult(
         confidence_score=confidence_score,
         raw_instability=round(raw_instability, 4),
@@ -231,5 +241,6 @@ def analyze_alignment_stability(
         match_count=match_count,
         mismatch_count=mismatch_count,
         gap_count=gap_count,
-        position_breakdown=breakdown,
+        position_breakdown=breakdown_out,
+        breakdown_truncated=breakdown_truncated,
     )

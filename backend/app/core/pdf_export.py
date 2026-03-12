@@ -1,24 +1,25 @@
 """
 core/pdf_export.py
 ==================
-Professional PDF report generator using reportlab.
+Executive Summary PDF Report Generator.
 
-``generate_job_pdf(record)`` accepts a ``JobRecord`` ORM instance and returns
-raw PDF bytes with no temp files written to disk.
+Generates a clean, single-page PDF report for bioinformatics analysis jobs.
+NO massive arrays, NO matrix loops - just actionable insights.
 
 Report sections
 ---------------
 1. Branded header (title + timestamp)
-2. Job metadata table (ID, type, created_at)
-3. Input parameters
-4. Results
+2. Job metadata (ID, Type, Sequences analyzed)
+3. Alignment Summary (Score, Algorithm)
+4. Stability Analysis (Confidence %, GC Content)
+5. Mutation Hotspots (bulleted list or stability status)
 """
 
 from __future__ import annotations
 
 import io
-import json
 from datetime import datetime
+from typing import Any
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -42,13 +43,16 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 _PAGE_W, _PAGE_H = A4
 _MARGIN = 2 * cm
 
-_BRAND_COLOR   = colors.HexColor("#1a6b4a")   # deep bio-green
-_ACCENT_COLOR  = colors.HexColor("#2ecc71")
-_SUBTLE_GRAY   = colors.HexColor("#f4f6f4")
-_TEXT_DARK     = colors.HexColor("#1c2b22")
+_BRAND_COLOR = colors.HexColor("#1a6b4a")   # deep bio-green
+_ACCENT_COLOR = colors.HexColor("#2ecc71")
+_SUBTLE_GRAY = colors.HexColor("#f4f6f4")
+_TEXT_DARK = colors.HexColor("#1c2b22")
+_WARNING_COLOR = colors.HexColor("#e74c3c")
+_SUCCESS_COLOR = colors.HexColor("#27ae60")
 
 
 def _make_styles() -> dict:
+    """Create custom paragraph styles for the PDF."""
     base = getSampleStyleSheet()
     return {
         "title": ParagraphStyle(
@@ -73,7 +77,7 @@ def _make_styles() -> dict:
             parent=base["Heading2"],
             textColor=_BRAND_COLOR,
             fontSize=11,
-            spaceBefore=12,
+            spaceBefore=10,
             spaceAfter=4,
             fontName="Helvetica-Bold",
         ),
@@ -85,24 +89,33 @@ def _make_styles() -> dict:
             leading=13,
             fontName="Helvetica",
         ),
-        "mono": ParagraphStyle(
-            "Mono",
-            parent=base["Code"],
-            textColor=colors.HexColor("#0a3d2e"),
-            fontSize=8,
-            leading=11,
-            fontName="Courier",
-            backColor=colors.HexColor("#eef5ee"),
-            leftIndent=6,
-        ),
-        "subsection": ParagraphStyle(
-            "Subsection",
-            parent=base["Heading3"],
-            textColor=_BRAND_COLOR,
+        "metric": ParagraphStyle(
+            "Metric",
+            parent=base["Normal"],
+            textColor=_TEXT_DARK,
             fontSize=10,
-            spaceBefore=8,
-            spaceAfter=2,
+            leading=14,
+            fontName="Helvetica",
+            leftIndent=10,
+        ),
+        "hotspot": ParagraphStyle(
+            "Hotspot",
+            parent=base["Normal"],
+            textColor=colors.HexColor("#c0392b"),
+            fontSize=9,
+            leading=12,
+            fontName="Helvetica",
+            leftIndent=20,
+            bulletIndent=10,
+        ),
+        "success": ParagraphStyle(
+            "Success",
+            parent=base["Normal"],
+            textColor=_SUCCESS_COLOR,
+            fontSize=10,
+            leading=14,
             fontName="Helvetica-Bold",
+            leftIndent=10,
         ),
     }
 
@@ -114,137 +127,145 @@ def _make_styles() -> dict:
 def _header_table(job_id: int, job_type: str, created_at: datetime, styles: dict):
     """Green branded header block."""
     ts = created_at.strftime("%Y-%m-%d %H:%M:%S UTC") if created_at else "N/A"
-    title_para    = Paragraph("🧬 Bioinformatics Research Platform", styles["title"])
+    title_para = Paragraph("BioSync Analysis Report", styles["title"])
     subtitle_para = Paragraph(
-        f"Job Report  ·  ID #{job_id}  ·  {job_type.upper()}  ·  {ts}",
+        f"Job #{job_id} | {job_type.upper()} | {ts}",
         styles["subtitle"],
     )
     tbl = Table([[title_para], [subtitle_para]], colWidths=[_PAGE_W - 2 * _MARGIN])
     tbl.setStyle(
         TableStyle([
             ("BACKGROUND", (0, 0), (-1, -1), _BRAND_COLOR),
-            ("TOPPADDING",    (0, 0), (-1, -1), 10),
+            ("TOPPADDING", (0, 0), (-1, -1), 10),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-            ("LEFTPADDING",   (0, 0), (-1, -1), 8),
-            ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
         ])
     )
     return tbl
 
 
-def _meta_table(record, styles: dict):
-    """Compact two-column metadata KV table."""
+def _build_metadata_section(record, styles: dict) -> list:
+    """Build job metadata section."""
+    flowables = []
+    flowables.append(Paragraph("Job Metadata", styles["section"]))
+    
     created = record.created_at.strftime("%Y-%m-%d %H:%M:%S") if record.created_at else "N/A"
+    
+    # Extract sequence names from input_data if available
+    input_data = record.get_input() if hasattr(record, 'get_input') else {}
+    seq_names = input_data.get("sequences", ["N/A", "N/A"])
+    if isinstance(seq_names, list) and len(seq_names) >= 2:
+        seq_info = f"{seq_names[0]} vs {seq_names[1]}"
+    else:
+        seq_info = "N/A"
+    
     rows = [
-        ["Job ID",      str(record.id)],
-        ["Type",        record.job_type],
-        ["Created At",  created],
-        ["Notes",       record.notes or "—"],
+        ["Job ID:", str(record.id)],
+        ["Type:", record.job_type.upper()],
+        ["Created:", created],
+        ["Sequences:", seq_info],
     ]
+    
     col_w = (_PAGE_W - 2 * _MARGIN) / 2
-    tbl = Table(rows, colWidths=[col_w * 0.35, col_w * 1.65])
+    tbl = Table(rows, colWidths=[col_w * 0.3, col_w * 1.7])
     tbl.setStyle(
         TableStyle([
-            ("FONTNAME",      (0, 0), (0, -1), "Helvetica-Bold"),
-            ("FONTNAME",      (1, 0), (1, -1), "Helvetica"),
-            ("FONTSIZE",      (0, 0), (-1, -1), 9),
-            ("TEXTCOLOR",     (0, 0), (0, -1), _BRAND_COLOR),
-            ("ROWBACKGROUNDS",(0, 0), (-1, -1), [colors.white, _SUBTLE_GRAY]),
-            ("GRID",          (0, 0), (-1, -1), 0.25, colors.HexColor("#cccccc")),
-            ("TOPPADDING",    (0, 0), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-            ("LEFTPADDING",   (0, 0), (-1, -1), 6),
+            ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+            ("FONTNAME", (1, 0), (1, -1), "Helvetica"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("TEXTCOLOR", (0, 0), (0, -1), _BRAND_COLOR),
+            ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.white, _SUBTLE_GRAY]),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
         ])
     )
-    return tbl
-
-
-def _json_section(data: dict, styles: dict, label: str) -> list:
-    """Pretty-print a JSON dict as a monospaced paragraph."""
-    if not data:
-        return [Paragraph("(empty)", styles["body"])]
-
-    flowables = [Paragraph(label, styles["section"])]
-    formatted = json.dumps(data, indent=2, ensure_ascii=False)
-    # reportlab Paragraph needs HTML-escaped text
-    safe = formatted.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    # Split long blocks into ≤ 120 char lines to avoid overflow
-    lines = "\n".join(line[:120] for line in safe.split("\n"))
-    flowables.append(Paragraph(lines.replace("\n", "<br/>"), styles["mono"]))
+    flowables.append(tbl)
     return flowables
 
 
-def _results_section(data: dict, styles: dict, label: str) -> list:
-    """Format the results section cleanly, filtering large arrays and showing alignment visual."""
-    if not data:
-        return [Paragraph("(empty)", styles["body"])]
+def _build_alignment_section(result_data: dict, styles: dict) -> list:
+    """Build alignment summary section."""
+    flowables = []
+    flowables.append(Paragraph("Alignment Summary", styles["section"]))
+    
+    # Determine algorithm and score
+    algorithm = result_data.get("algorithm", "N/A")
+    if algorithm == "smith-waterman":
+        score = result_data.get("local_score", "N/A")
+        score_label = "Local Score"
+    else:
+        score = result_data.get("optimal_score", "N/A")
+        score_label = "Global Score"
+    
+    # Get alignment lengths
+    align1 = result_data.get("alignment_1") or result_data.get("local_alignment_1", "")
+    align2 = result_data.get("alignment_2") or result_data.get("local_alignment_2", "")
+    alignment_length = len(align1) if align1 else 0
+    
+    flowables.append(Paragraph(f"<b>Algorithm:</b> {algorithm.upper()}", styles["metric"]))
+    flowables.append(Paragraph(f"<b>{score_label}:</b> {score}", styles["metric"]))
+    flowables.append(Paragraph(f"<b>Alignment Length:</b> {alignment_length} bp", styles["metric"]))
+    
+    return flowables
 
-    flowables = [Paragraph(label, styles["section"])]
+
+def _build_stability_section(result_data: dict, styles: dict) -> list:
+    """Build stability analysis section."""
+    flowables = []
+    flowables.append(Paragraph("Stability Analysis", styles["section"]))
     
-    # Filter out score_matrix and position_breakdown
-    filtered = {k: v for k, v in data.items() if k not in ("score_matrix", "position_breakdown")}
+    # Get stability metrics
+    confidence = result_data.get("confidence_score")
+    gc1 = result_data.get("gc_content_seq1")
+    gc2 = result_data.get("gc_content_seq2")
     
-    # 1. Clean Summary
-    summary_lines = []
-    if "optimal_score" in filtered:
-        summary_lines.append(f"<b>Global Score:</b> {filtered.pop('optimal_score')}")
-    if "local_score" in filtered:
-        summary_lines.append(f"<b>Local Score:</b> {filtered.pop('local_score')}")
-    if "confidence_score" in filtered:
-        summary_lines.append(f"<b>Confidence Score:</b> {filtered.pop('confidence_score')}")
-    if "gc_content_seq1" in filtered:
-        summary_lines.append(f"<b>GC Content (Seq 1):</b> {filtered.pop('gc_content_seq1')}")
-    if "gc_content_seq2" in filtered:
-        summary_lines.append(f"<b>GC Content (Seq 2):</b> {filtered.pop('gc_content_seq2')}")
-        
-    if summary_lines:
-        flowables.append(Paragraph("<br/>".join(summary_lines), styles["body"]))
-        flowables.append(Spacer(1, 0.3 * cm))
-        
-    # 2. Sequence Alignment Visual
-    seq1 = filtered.pop("alignment_1", filtered.pop("local_alignment_1", None))
-    seq2 = filtered.pop("alignment_2", filtered.pop("local_alignment_2", None))
+    # Match/Mismatch/Gap counts
+    matches = result_data.get("match_count", 0)
+    mismatches = result_data.get("mismatch_count", 0)
+    gaps = result_data.get("gap_count", 0)
     
-    if seq1 and seq2:
-        seq1 = str(seq1)
-        seq2 = str(seq2)
-        flowables.append(Paragraph("Sequence Alignment", styles["subsection"]))
-        chunk_size = 60
-        mono_lines = []
-        for i in range(0, max(len(seq1), len(seq2)), chunk_size):
-            s1_chunk = seq1[i:i+chunk_size]
-            s2_chunk = seq2[i:i+chunk_size]
-            mono_lines.append(f"Seq 1: {s1_chunk}")
-            mono_lines.append(f"Seq 2: {s2_chunk}")
-            mono_lines.append("")
+    if confidence is not None:
+        flowables.append(Paragraph(f"<b>Confidence Score:</b> {confidence:.1f}%", styles["metric"]))
+    
+    if gc1 is not None and gc2 is not None:
+        flowables.append(Paragraph(f"<b>GC Content:</b> Seq1={gc1:.2%} | Seq2={gc2:.2%}", styles["metric"]))
+    
+    flowables.append(
+        Paragraph(f"<b>Alignment Stats:</b> {matches} matches, {mismatches} mismatches, {gaps} gaps", styles["metric"])
+    )
+    
+    return flowables
+
+
+def _build_hotspots_section(result_data: dict, styles: dict) -> list:
+    """Build mutation hotspots section - BULLETED LIST ONLY, NO ARRAYS."""
+    flowables = []
+    flowables.append(Paragraph("Mutation Hotspots", styles["section"]))
+    
+    hotspots = result_data.get("mutation_hotspots", [])
+    
+    if not hotspots:
+        # Stable sequence - show success message
+        flowables.append(
+            Paragraph("Status: Highly Stable - No Structural Anomalies or Hotspots Detected.", styles["success"])
+        )
+    else:
+        # Build bulleted list of hotspots
+        flowables.append(Paragraph(f"<b>Detected {len(hotspots)} mutation hotspot(s):</b>", styles["metric"]))
+        flowables.append(Spacer(1, 0.2 * cm))
         
-        if mono_lines and not mono_lines[-1]:
-            mono_lines.pop()
+        for i, hs in enumerate(hotspots, 1):
+            start = hs.get("start", "?")
+            end = hs.get("end", "?")
+            hs_type = hs.get("dominant_type", "UNKNOWN")
+            instability = hs.get("window_instability", 0)
             
-        safe_mono = "\n".join(mono_lines).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        flowables.append(Paragraph(safe_mono.replace("\n", "<br/>"), styles["mono"]))
-        flowables.append(Spacer(1, 0.3 * cm))
-        
-    # 3. Mutation Summary
-    if "mutation_hotspots" in data:
-        flowables.append(Paragraph("Mutation Summary", styles["subsection"]))
-        hotspots = filtered.pop("mutation_hotspots", [])
-        if not hotspots:
-            flowables.append(Paragraph("Status: Highly Stable - No Hotspots Detected.", styles["body"]))
-        else:
-            hotspot_lines = [json.dumps(h, ensure_ascii=False) for h in hotspots]
-            safe_hotspots = "<br/>".join(hotspot_lines).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-            flowables.append(Paragraph(safe_hotspots, styles["mono"]))
-        flowables.append(Spacer(1, 0.3 * cm))
-
-    # 4. Any remaining output goes as JSON
-    if filtered:
-        flowables.append(Paragraph("Additional Details", styles["subsection"]))
-        formatted = json.dumps(filtered, indent=2, ensure_ascii=False)
-        safe = formatted.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        lines = "\n".join(line[:120] for line in safe.split("\n"))
-        flowables.append(Paragraph(lines.replace("\n", "<br/>"), styles["mono"]))
-        
+            # Format: "Hotspot 1: MISMATCH at positions 43-45 (instability: 0.60)"
+            bullet_text = f"• Hotspot {i}: {hs_type} at positions {start}-{end} (instability: {instability:.2f})"
+            flowables.append(Paragraph(bullet_text, styles["hotspot"]))
+    
     return flowables
 
 
@@ -254,14 +275,25 @@ def _results_section(data: dict, styles: dict, label: str) -> list:
 
 def generate_job_pdf(record) -> bytes:
     """
-    Build a PDF report for *record* (a ``JobRecord`` ORM instance or any object
-    with ``.id``, ``.job_type``, ``.created_at``, ``.notes``,
-    ``.get_input()``, ``.get_result()`` attributes).
-
+    Generate a single-page executive summary PDF for a bioinformatics analysis job.
+    
+    Parameters
+    ----------
+    record : JobRecord
+        ORM instance with .id, .job_type, .created_at, .notes, .get_input(), .get_result()
+    
     Returns
     -------
     bytes
-        Raw PDF content ready to stream to the client.
+        Raw PDF content ready to stream to client.
+    
+    Notes
+    -----
+    This function deliberately excludes:
+    - score_matrix (can be 30,000 x 30,000 elements)
+    - position_breakdown (one entry per aligned base)
+    
+    The PDF is designed to be a concise 1-page summary, NOT a data dump.
     """
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -271,40 +303,58 @@ def generate_job_pdf(record) -> bytes:
         rightMargin=_MARGIN,
         topMargin=_MARGIN,
         bottomMargin=_MARGIN,
-        title=f"Bio Job #{record.id}",
-        author="Bioinformatics Research Platform",
+        title=f"BioSync Report #{record.id}",
+        author="BioSync Command Center",
     )
 
     styles = _make_styles()
     story = []
 
+    # Extract result data
+    result_data = record.get_result() if hasattr(record, 'get_result') else {}
+    # Handle nested structure: result_data may have 'alignment' and 'stability' keys
+    if "alignment" in result_data:
+        alignment_data = result_data["alignment"]
+    else:
+        alignment_data = result_data
+    
+    if "stability" in result_data:
+        stability_data = result_data["stability"]
+    else:
+        stability_data = result_data
+
     # 1. Branded header
     story.append(_header_table(record.id, record.job_type, record.created_at, styles))
-    story.append(Spacer(1, 0.4 * cm))
-
-    # 2. Metadata
-    story.append(Paragraph("Job Metadata", styles["section"]))
-    story.append(_meta_table(record, styles))
     story.append(Spacer(1, 0.3 * cm))
     story.append(HRFlowable(width="100%", thickness=0.5, color=_ACCENT_COLOR))
 
-    # 3. Input
-    story.extend(_json_section(record.get_input(), styles, "Input Parameters"))
-    story.append(Spacer(1, 0.3 * cm))
+    # 2. Job Metadata
+    story.extend(_build_metadata_section(record, styles))
+    story.append(Spacer(1, 0.2 * cm))
     story.append(HRFlowable(width="100%", thickness=0.5, color=_ACCENT_COLOR))
 
-    # 4. Results
-    story.extend(_results_section(record.get_result(), styles, "Results"))
-    story.append(Spacer(1, 0.5 * cm))
+    # 3. Alignment Summary
+    story.extend(_build_alignment_section(alignment_data, styles))
+    story.append(Spacer(1, 0.2 * cm))
+    story.append(HRFlowable(width="100%", thickness=0.5, color=_ACCENT_COLOR))
 
-    # Footer note
+    # 4. Stability Analysis
+    story.extend(_build_stability_section(stability_data, styles))
+    story.append(Spacer(1, 0.2 * cm))
+    story.append(HRFlowable(width="100%", thickness=0.5, color=_ACCENT_COLOR))
+
+    # 5. Mutation Hotspots (BULLETED LIST)
+    story.extend(_build_hotspots_section(stability_data, styles))
+    story.append(Spacer(1, 0.3 * cm))
+
+    # Footer
+    story.append(HRFlowable(width="100%", thickness=0.5, color=_ACCENT_COLOR))
+    story.append(Spacer(1, 0.2 * cm))
     story.append(
         Paragraph(
-            f"Generated by Bioinformatics Research Platform v3.0.0 · "
-            f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
+            f"Generated by BioSync Command Center v3.0.0 | {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
             ParagraphStyle(
                 "Footer",
-                parent=styles["body"],
                 textColor=colors.gray,
                 fontSize=7,
                 alignment=TA_CENTER,

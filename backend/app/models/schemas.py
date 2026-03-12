@@ -203,3 +203,4 @@ class StabilityResponse(BaseModel):
     mismatch_count: int
     gap_count: int
     position_breakdown: list[dict[str, Any]]
+    breakdown_truncated: bool = Field(False, description="True if position_breakdown was omitted due to size")

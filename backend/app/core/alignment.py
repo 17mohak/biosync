@@ -83,7 +83,9 @@ def needleman_wunsch(
     while j > 0:
         align1.append("-"); align2.append(seq2[j - 1]); j -= 1
 
-    if len(seq1) > 200 or len(seq2) > 200:
+    # DOM SAFEGUARD: Truncate matrix for sequences > 100bp to prevent
+    # catastrophic frontend DOM freezing with large viral genomes (30,000+ bp)
+    if len(seq1) > 100 or len(seq2) > 100:
         score_matrix_out = []
         matrix_truncated = True
     else:
@@ -165,7 +167,9 @@ def smith_waterman(
             align2.append(seq2[j - 1])
             j -= 1
 
-    if len(seq1) > 200 or len(seq2) > 200:
+    # DOM SAFEGUARD: Truncate matrix for sequences > 100bp to prevent
+    # catastrophic frontend DOM freezing with large viral genomes (30,000+ bp)
+    if len(seq1) > 100 or len(seq2) > 100:
         score_matrix_out = []
         matrix_truncated = True
     else:
