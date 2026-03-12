@@ -190,17 +190,42 @@ export const GCAnalyticsView: React.FC<GCAnalyticsViewProps> = ({ sequence }) =>
           throw new Error("Failed to fetch analytics");
         }
 
-        const result = await response.json();
-        setData(result);
+        const rawApiData = await response.json();
+        
+        // Translate backend API response to Kimi UI Contract
+        const mappedData: GCAnalyticsData = {
+          sequence_length: rawApiData.global_stats?.length || 0,
+          gc_content: rawApiData.global_stats?.gc_content || 0,
+          melting_temp: rawApiData.melting_temperature || 0,
+          base_distribution: {
+            A: rawApiData.global_stats?.count_a || 0,
+            T: rawApiData.global_stats?.count_t || 0,
+            C: rawApiData.global_stats?.count_c || 0,
+            G: rawApiData.global_stats?.count_g || 0,
+          },
+          // Map the sliding window array - backend uses gc_percent
+          sliding_window: (rawApiData.sliding_window_gc || []).map((item: any) => ({
+            position: item.position || 0,
+            gc_percentage: item.gc_percent || 0,
+          })),
+        };
+        
+        setData(mappedData);
       } catch (err: any) {
         setError(err.message);
         // Fallback to demo data if backend unavailable
+        const demoLength = seqToAnalyze.length;
         setData({
-          sequence_length: seqToAnalyze.length,
+          sequence_length: demoLength,
           gc_content: 42.5,
           melting_temp: 78.3,
-          base_distribution: { A: 25, T: 25, C: 25, G: 25 },
-          sliding_window: Array.from({ length: 50 }, (_, i) => ({
+          base_distribution: { 
+            A: Math.floor(demoLength * 0.25), 
+            T: Math.floor(demoLength * 0.25), 
+            C: Math.floor(demoLength * 0.25), 
+            G: Math.floor(demoLength * 0.25) 
+          },
+          sliding_window: Array.from({ length: Math.min(50, Math.floor(demoLength / 20)) }, (_, i) => ({
             position: i * 20,
             gc_percentage: 30 + Math.random() * 40,
           })),
@@ -254,15 +279,14 @@ export const GCAnalyticsView: React.FC<GCAnalyticsViewProps> = ({ sequence }) =>
 
   if (!isValidData) {
     return (
-      <div className="p-8 font-mono text-sm overflow-auto h-full">
-        <h3 className="text-rose-500 mb-4 text-xl flex items-center gap-2">
-          <AlertCircle className="w-6 h-6" /> API Contract Mismatch
-        </h3>
-        <p className="text-white/50 mb-4">Kimi expected: <span className="text-cyan-400">sequence_length, gc_content, melting_temp, base_distribution, sliding_window</span></p>
-        <p className="text-white/50 mb-2">But the backend actually sent:</p>
-        <pre className="bg-[#0a0a0a] p-6 rounded-xl border border-rose-500/30 text-amber-400 whitespace-pre-wrap">
-          {JSON.stringify(data, null, 2)}
-        </pre>
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
+          <p className="text-amber-400 font-mono">Invalid data format received</p>
+          <p className="text-white/30 font-mono text-xs mt-2">
+            Check backend API response
+          </p>
+        </div>
       </div>
     );
   }
