@@ -273,53 +273,10 @@ const GenBankImport: React.FC<{
       const header = lines[0]; // >accession description
       const sequence = lines.slice(1).join('');
       
-      // Create an aggressively mutated variant to demonstrate anomaly detection
-      // Strategy: Large substitution blocks + frameshift gaps to tank stability score
-      const bases = ['A', 'T', 'C', 'G'];
-      let mutatedSequence = '';
-      
-      // Define a large mutation block (20-30% of sequence)
-      const blockStart = Math.floor(sequence.length * 0.3);
-      const blockEnd = Math.floor(sequence.length * 0.6);
-      
-      // Add some scattered point mutations outside the block
-      const pointMutationRate = 0.08; // 8% scattered mutations
-      
-      for (let i = 0; i < sequence.length; i++) {
-        const base = sequence[i];
-        
-        // Large substitution block with 70% mutation rate
-        if (i >= blockStart && i < blockEnd) {
-          if (Math.random() < 0.7) {
-            // Aggressive substitution in the block
-            const otherBases = bases.filter(b => b !== base.toUpperCase());
-            mutatedSequence += otherBases[Math.floor(Math.random() * otherBases.length)];
-          } else {
-            mutatedSequence += base;
-          }
-        }
-        // Occasional frameshift gap (deletion) - very damaging to stability
-        else if (Math.random() < 0.02) {
-          // Skip this base (deletion/frameshift)
-          continue;
-        }
-        // Scattered point mutations outside block
-        else if (Math.random() < pointMutationRate) {
-          const otherBases = bases.filter(b => b !== base.toUpperCase());
-          mutatedSequence += otherBases[Math.floor(Math.random() * otherBases.length)];
-        }
-        else {
-          mutatedSequence += base;
-        }
-      }
-      
-      // Occasionally insert a small duplication (insertion mutation)
-      if (Math.random() < 0.5 && mutatedSequence.length > 100) {
-        const insertPos = Math.floor(Math.random() * mutatedSequence.length * 0.5);
-        const insertLength = Math.floor(Math.random() * 10) + 5;
-        const insertion = mutatedSequence.slice(insertPos, insertPos + insertLength);
-        mutatedSequence = mutatedSequence.slice(0, insertPos) + insertion + mutatedSequence.slice(insertPos);
-      }
+      // 2. Create a Severe Synthetic Variant (Simulating a dangerous 15bp mutation cluster)
+      // We replace bases 50-65 with a jarring mismatch block to trigger the ML warning
+      const severeAnomaly = "TGACGGATCGATACA";
+      const mutatedSequence = sequence.substring(0, 50) + severeAnomaly + sequence.substring(65);
       
       // Create a 2-sequence FASTA file
       const syntheticFasta = `${header}
