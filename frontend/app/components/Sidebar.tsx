@@ -42,20 +42,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
         />
       )}
 
-      {/* Sidebar */}
-      <motion.aside
-        initial={false}
-        animate={{
-          x: isMobileOpen ? 0 : -100 + "%",
-          opacity: isMobileOpen ? 1 : 0,
-        }}
-        transition={{ type: "spring", damping: 25, stiffness: 200 }}
+      {/* Sidebar - Fixed width, always visible on desktop */}
+      <aside
         className={`
           fixed lg:static inset-y-0 left-0 z-50
-          w-[250px] bg-[#030303]/95 backdrop-blur-3xl
-          border-r border-white/5
+          w-64 h-full flex-shrink-0
+          border-r border-white/10 
+          bg-[#030303]/95 backdrop-blur-3xl
           flex flex-col
-          lg:translate-x-0 lg:opacity-100
+          transform transition-transform duration-300 ease-in-out
+          lg:transform-none lg:opacity-100
+          ${isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
         `}
       >
         {/* Logo Section */}
@@ -97,7 +94,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   whileTap={{ scale: 0.98 }}
                   className={`
                     w-full flex items-center gap-3 px-4 py-3 rounded-lg
-                    transition-all duration-200 text-left
+                    transition-all duration-200 text-left relative
                     ${
                       isActive
                         ? "bg-emerald-500/10 text-emerald-400 border-r-2 border-emerald-500"
@@ -107,14 +104,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 >
                   <Icon className={`w-5 h-5 ${isActive ? "text-emerald-400" : ""}`} />
                   <span className="text-sm font-medium">{item.label}</span>
-                  
-                  {isActive && (
-                    <motion.div
-                      layoutId="activeIndicator"
-                      className="absolute right-0 w-0.5 h-8 bg-emerald-500 rounded-l-full"
-                      transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                    />
-                  )}
                 </motion.button>
               );
             })}
@@ -135,7 +124,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="text-xs font-mono text-white/40">System Online</span>
           </div>
         </div>
-      </motion.aside>
+      </aside>
     </>
   );
 };

@@ -791,7 +791,7 @@ ${mutatedSeq}`;
 
   return (
     <LayoutGroup>
-      <div className="min-h-screen bg-[#030303] text-white overflow-x-hidden flex">
+      <div className="flex h-screen w-full overflow-hidden bg-[#030303] text-white">
         {/* Background Effects */}
         <ParticleField mouseX={mouseX} mouseY={mouseY} />
         <Scanline />
@@ -842,7 +842,7 @@ ${mutatedSeq}`;
         />
 
         {/* Main Content Area */}
-        <main className="flex-1 min-w-0 relative">
+        <main className="flex-1 h-full overflow-y-auto overflow-x-hidden relative">
           <AnimatePresence mode="wait">
           {/* Alignment View */}
           {activeView === "alignment" && (
