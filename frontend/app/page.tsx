@@ -585,8 +585,6 @@ const SpatialDataCanvas: React.FC<{
               matrix={alignment.score_matrix}
               seq1={seq1}
               seq2={seq2}
-              maxDisplayRows={20}
-              maxDisplayCols={24}
               matrix_compressed={alignment.matrix_compressed}
             />
           </div>
