@@ -95,12 +95,18 @@ const StatCard: React.FC<StatCardProps> = ({
 const BaseDistributionBar: React.FC<{
   distribution: { A: number; T: number; C: number; G: number };
 }> = ({ distribution }) => {
-  const total = distribution.A + distribution.T + distribution.C + distribution.G;
+  const safeDistribution = {
+    A: distribution?.A || 0,
+    T: distribution?.T || 0,
+    C: distribution?.C || 0,
+    G: distribution?.G || 0,
+  };
+  const total = Math.max(1, safeDistribution.A + safeDistribution.T + safeDistribution.C + safeDistribution.G);
   const percentages = {
-    A: ((distribution.A / total) * 100).toFixed(1),
-    T: ((distribution.T / total) * 100).toFixed(1),
-    C: ((distribution.C / total) * 100).toFixed(1),
-    G: ((distribution.G / total) * 100).toFixed(1),
+    A: ((safeDistribution.A / total) * 100).toFixed(1),
+    T: ((safeDistribution.T / total) * 100).toFixed(1),
+    C: ((safeDistribution.C / total) * 100).toFixed(1),
+    G: ((safeDistribution.G / total) * 100).toFixed(1),
   };
 
   return (
@@ -207,6 +213,7 @@ export const GCAnalyticsView: React.FC<GCAnalyticsViewProps> = ({ sequence }) =>
     fetchAnalytics();
   }, [sequence]);
 
+  // Strict loading guard
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -216,16 +223,43 @@ export const GCAnalyticsView: React.FC<GCAnalyticsViewProps> = ({ sequence }) =>
         >
           <Loader2 className="w-8 h-8 text-cyan-400" />
         </motion.div>
+        <span className="ml-3 text-white/50 font-mono">Loading Analytics...</span>
       </div>
     );
   }
 
+  // No data guard
   if (!data) {
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-center">
           <PieChart className="w-12 h-12 text-white/20 mx-auto mb-4" />
           <p className="text-white/40 font-mono">No sequence data available</p>
+          <p className="text-white/30 font-mono text-xs mt-2">
+            Please fetch a sequence first
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Validate data structure
+  const isValidData = 
+    typeof data.sequence_length === 'number' &&
+    typeof data.gc_content === 'number' &&
+    typeof data.melting_temp === 'number' &&
+    data.base_distribution &&
+    data.sliding_window &&
+    Array.isArray(data.sliding_window);
+
+  if (!isValidData) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-amber-400 font-mono">Invalid data format received</p>
+          <p className="text-white/30 font-mono text-xs mt-2">
+            Check backend API response
+          </p>
         </div>
       </div>
     );
@@ -259,7 +293,7 @@ export const GCAnalyticsView: React.FC<GCAnalyticsViewProps> = ({ sequence }) =>
         <StatCard
           icon={<Dna className="w-5 h-5" />}
           label="Sequence Length"
-          value={data.sequence_length.toLocaleString()}
+          value={data?.sequence_length?.toLocaleString?.() || "0"}
           subtext="base pairs"
           color="from-cyan-500"
           delay={0}
@@ -269,8 +303,8 @@ export const GCAnalyticsView: React.FC<GCAnalyticsViewProps> = ({ sequence }) =>
         <StatCard
           icon={<Activity className="w-5 h-5" />}
           label="GC Content"
-          value={`${data.gc_content.toFixed(1)}%`}
-          subtext={data.gc_content > 60 ? "High stability" : data.gc_content > 40 ? "Moderate stability" : "Low stability"}
+          value={`${data?.gc_content?.toFixed?.(1) || "0"}%`}
+          subtext={(data?.gc_content || 0) > 60 ? "High stability" : (data?.gc_content || 0) > 40 ? "Moderate stability" : "Low stability"}
           color="from-emerald-500"
           delay={0.1}
         />
@@ -279,7 +313,7 @@ export const GCAnalyticsView: React.FC<GCAnalyticsViewProps> = ({ sequence }) =>
         <StatCard
           icon={<Flame className="w-5 h-5" />}
           label="Est. Melting Temp"
-          value={`${data.melting_temp.toFixed(1)}°C`}
+          value={`${data?.melting_temp?.toFixed?.(1) || "0"}°C`}
           subtext="Tm calculation"
           color="from-rose-500"
           delay={0.2}
@@ -304,7 +338,7 @@ export const GCAnalyticsView: React.FC<GCAnalyticsViewProps> = ({ sequence }) =>
               </span>
             </div>
             
-            <BaseDistributionBar distribution={data.base_distribution} />
+            <BaseDistributionBar distribution={data?.base_distribution || { A: 0, T: 0, C: 0, G: 0 }} />
           </div>
         </motion.div>
       </div>
@@ -342,7 +376,7 @@ export const GCAnalyticsView: React.FC<GCAnalyticsViewProps> = ({ sequence }) =>
         <div className="h-[400px]">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
-              data={data.sliding_window}
+              data={data?.sliding_window || []}
               margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
             >
               <defs>
