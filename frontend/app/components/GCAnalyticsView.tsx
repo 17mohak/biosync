@@ -10,7 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { PieChart, Flame, Dna, Activity, Loader2 } from "lucide-react";
+import { PieChart, Flame, Dna, Activity, Loader2, AlertCircle } from "lucide-react";
 
 // =============================================================================
 // TYPES
@@ -254,13 +254,15 @@ export const GCAnalyticsView: React.FC<GCAnalyticsViewProps> = ({ sequence }) =>
 
   if (!isValidData) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-amber-400 font-mono">Invalid data format received</p>
-          <p className="text-white/30 font-mono text-xs mt-2">
-            Check backend API response
-          </p>
-        </div>
+      <div className="p-8 font-mono text-sm overflow-auto h-full">
+        <h3 className="text-rose-500 mb-4 text-xl flex items-center gap-2">
+          <AlertCircle className="w-6 h-6" /> API Contract Mismatch
+        </h3>
+        <p className="text-white/50 mb-4">Kimi expected: <span className="text-cyan-400">sequence_length, gc_content, melting_temp, base_distribution, sliding_window</span></p>
+        <p className="text-white/50 mb-2">But the backend actually sent:</p>
+        <pre className="bg-[#0a0a0a] p-6 rounded-xl border border-rose-500/30 text-amber-400 whitespace-pre-wrap">
+          {JSON.stringify(data, null, 2)}
+        </pre>
       </div>
     );
   }
