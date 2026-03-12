@@ -27,6 +27,7 @@ interface StabilityHeatmapProps {
   positionBreakdown: PositionBreakdown[];
   hotspots: MutationHotspot[];
   confidenceScore?: number;
+  breakdown_truncated?: boolean; // 🆕 NEW FLAG
 }
 
 // =============================================================================
@@ -37,7 +38,71 @@ export const StabilityHeatmap: React.FC<StabilityHeatmapProps> = ({
   positionBreakdown,
   hotspots,
   confidenceScore,
+  breakdown_truncated = false,
 }) => {
+  // 🆕 Handle truncated data
+  if (breakdown_truncated || positionBreakdown.length === 0) {
+    return (
+      <div className="mt-8 space-y-6">
+        {/* Header with Confidence Score */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 300, damping: 20 }}
+            >
+              <Zap className="w-4 h-4 text-emerald-400" />
+            </motion.div>
+            <span className="text-xs font-mono text-white/40 uppercase tracking-widest">
+              ML Stability Analysis
+            </span>
+          </div>
+
+          {confidenceScore !== undefined && (
+            <motion.div
+              className={`text-sm font-mono ${
+                confidenceScore >= 80 ? 'text-emerald-400' : 
+                confidenceScore >= 50 ? 'text-amber-400' : 'text-rose-400'
+              }`}
+            >
+              {confidenceScore.toFixed(1)}% Confidence
+            </motion.div>
+          )}
+        </div>
+
+        <div className="mt-4 p-4 bg-white/[0.02] border border-white/5 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-mono text-white/50 uppercase">Stability Analysis</span>
+            <span className={`text-sm font-mono ${
+              (confidenceScore ?? 0) >= 80 ? 'text-emerald-400' : 
+              (confidenceScore ?? 0) >= 50 ? 'text-amber-400' : 'text-rose-400'
+            }`}>
+              {(confidenceScore ?? 0).toFixed(1)}% Confidence
+            </span>
+          </div>
+          <p className="text-xs text-white/30 font-mono">
+            Detailed position breakdown truncated for large alignment ({hotspots.length} hotspots detected).
+          </p>
+          
+          {/* Hotspots summary */}
+          {hotspots.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {hotspots.map((hotspot, idx) => (
+                <span
+                  key={idx}
+                  className="px-2 py-1 text-[10px] font-mono bg-rose-500/10 text-rose-400/70 rounded"
+                >
+                  {hotspot.start}-{hotspot.end}: {hotspot.dominant_type}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // Calculate statistics for display
   const matches = positionBreakdown.filter((p) => p.position_type === "match").length;
   const mismatches = positionBreakdown.filter((p) => p.position_type === "mismatch").length;
@@ -227,7 +292,7 @@ export const StabilityHeatmap: React.FC<StabilityHeatmapProps> = ({
           <span className="text-xs font-mono text-white/30">5&apos;</span>
           <div className="flex items-center gap-2 text-[10px] font-mono text-white/20">
             <Activity className="w-3 h-3" />
-            <span>{positionBreakdown.length} bp analyzed</span>
+            <span>{positionBreakdown.length.toLocaleString()} bp analyzed</span>
           </div>
         </div>
 

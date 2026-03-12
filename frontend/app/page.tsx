@@ -52,6 +52,7 @@ interface AlignmentResult {
   local_score?: number;
   score_matrix: number[][];
   algorithm: string;
+  matrix_truncated?: boolean; // 🆕 NEW FLAG
 }
 
 interface StabilityResult {
@@ -76,6 +77,7 @@ interface StabilityResult {
     position_type: string;
     instability: number;
   }>;
+  breakdown_truncated?: boolean; // 🆕 NEW FLAG
 }
 
 interface JobRecord {
@@ -504,6 +506,7 @@ const SpatialDataCanvas: React.FC<{
                 positionBreakdown={stability.position_breakdown}
                 hotspots={stability.mutation_hotspots}
                 confidenceScore={stability.confidence_score}
+                breakdown_truncated={stability.breakdown_truncated}
               />
             )}
           </div>
@@ -545,6 +548,7 @@ const SpatialDataCanvas: React.FC<{
               seq2={seq2}
               maxDisplayRows={20}
               maxDisplayCols={24}
+              matrix_truncated={alignment.matrix_truncated}
             />
           </div>
         </div>
@@ -657,13 +661,13 @@ export default function BioSyncCommandCenter() {
       setFastaRecords(parseData.records);
 
       if (parseData.records.length >= 2) {
-        // Run alignment
+        // Run alignment with full sequences (backend handles truncation)
         const alignResponse = await fetch("http://localhost:8000/api/align/local", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            sequence_1: parseData.records[0].sequence.slice(0, 80),
-            sequence_2: parseData.records[1].sequence.slice(0, 80),
+            sequence_1: parseData.records[0].sequence,
+            sequence_2: parseData.records[1].sequence,
           }),
         });
 

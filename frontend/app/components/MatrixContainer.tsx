@@ -2,17 +2,11 @@
 
 import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
-import { Activity, Maximize2 } from "lucide-react";
+import { Activity, Maximize2, Database, AlertCircle } from "lucide-react";
 
 // =============================================================================
 // TYPES
 // =============================================================================
-
-interface MatrixCell {
-  i: number;
-  j: number;
-  value: number;
-}
 
 interface MatrixContainerProps {
   matrix: number[][];
@@ -20,6 +14,7 @@ interface MatrixContainerProps {
   seq2: string;
   maxDisplayRows?: number;
   maxDisplayCols?: number;
+  matrix_truncated?: boolean; // 🆕 NEW FLAG
 }
 
 // =============================================================================
@@ -32,9 +27,51 @@ export const MatrixContainer: React.FC<MatrixContainerProps> = ({
   seq2,
   maxDisplayRows = 50,
   maxDisplayCols = 50,
+  matrix_truncated = false,
 }) => {
   const [hoveredCell, setHoveredCell] = useState<{ i: number; j: number } | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // 🆕 GUARD: Show glassmorphism warning card instead of matrix
+  if (matrix_truncated || matrix.length === 0) {
+    return (
+      <div className="relative">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <Activity className="w-4 h-4 text-violet-400" />
+            <span className="text-xs font-mono text-white/40 uppercase tracking-widest">
+              Score Matrix
+            </span>
+          </div>
+        </div>
+
+        {/* Glassmorphism Warning Card */}
+        <div className="relative p-8 rounded-xl overflow-hidden">
+          {/* Glassmorphism background */}
+          <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-violet-500/5 to-transparent backdrop-blur-xl" />
+          <div className="absolute inset-0 border border-white/10 rounded-xl" />
+          
+          {/* Content */}
+          <div className="relative z-10 text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-violet-500/20 mb-4">
+              <Database className="w-8 h-8 text-violet-400" />
+            </div>
+            <h3 className="text-lg font-medium text-white/90 mb-2">
+              Matrix Visualization Unavailable
+            </h3>
+            <p className="text-sm text-white/50 font-mono max-w-xs mx-auto">
+              Sequence exceeds 100bp threshold. Score matrix truncated to prevent browser memory overflow.
+            </p>
+            <div className="mt-4 flex items-center justify-center gap-2 text-xs text-cyan-400/70">
+              <AlertCircle className="w-4 h-4" />
+              <span>Alignment score and hotspots still available</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Calculate max value for intensity
   const { maxVal, minVal } = useMemo(() => {

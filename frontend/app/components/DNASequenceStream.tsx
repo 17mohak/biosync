@@ -2,7 +2,6 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { JitterBase } from "./JitterBase";
 import { Dna } from "lucide-react";
 
 // =============================================================================
@@ -26,7 +25,7 @@ interface DNASequenceStreamProps {
 }
 
 // =============================================================================
-// DNA SEQUENCE STREAM COMPONENT
+// DNA SEQUENCE STREAM COMPONENT - OPTIMIZED FOR PERFORMANCE
 // =============================================================================
 
 export const DNASequenceStream: React.FC<DNASequenceStreamProps> = ({
@@ -37,7 +36,6 @@ export const DNASequenceStream: React.FC<DNASequenceStreamProps> = ({
   onHoverIndex,
   showIcon = true,
 }) => {
-  const chars = sequence.split("");
   const alignmentChars = alignment?.split("") || [];
 
   // Check if index is within a hotspot
@@ -49,6 +47,79 @@ export const DNASequenceStream: React.FC<DNASequenceStreamProps> = ({
   const getHotspotInfo = (i: number): MutationHotspot | null => {
     return hotspots.find((h) => i >= h.start && i < h.end) || null;
   };
+
+  // ✅ OPTIMIZED: Chunk consecutive matching bases, only wrap mutations/gaps
+  const renderOptimizedSequence = (seq: string, alignmentChars: string[]) => {
+    const elements: React.ReactNode[] = [];
+    let currentChunk = "";
+    let chunkStart = 0;
+
+    for (let i = 0; i < seq.length; i++) {
+      const base = seq[i];
+      const alignedBase = alignmentChars[i];
+      const isGap = base === "-";
+      const isMismatch = !!(
+        alignedBase &&
+        base !== alignedBase &&
+        base !== "-" &&
+        alignedBase !== "-"
+      );
+
+      if (isMismatch || isGap) {
+        // Flush accumulated normal chunk
+        if (currentChunk) {
+          elements.push(
+            <span key={`chunk-${chunkStart}`} className="text-white/70">
+              {currentChunk}
+            </span>
+          );
+          currentChunk = "";
+        }
+        // Wrap mismatch/gap in span with Tailwind
+        const hotspotInfo = getHotspotInfo(i);
+        const isHotspotPos = isHotspot(i) && (isMismatch || isGap);
+
+        elements.push(
+          <motion.span
+            key={`mutation-${i}`}
+            className={`${
+              isMismatch
+                ? "text-rose-400 font-bold"
+                : "text-amber-400/70"
+            } ${isHotspotPos ? "animate-pulse" : ""}`}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: i * 0.0005, duration: 0.1 }}
+            onMouseEnter={() => onHoverIndex?.(i)}
+            onMouseLeave={() => onHoverIndex?.(null)}
+          >
+            {base}
+            {isHotspotPos && (
+              <span className="absolute -bottom-1 left-0 right-0 h-0.5 bg-rose-500/50" />
+            )}
+          </motion.span>
+        );
+      } else {
+        // Accumulate matching bases
+        if (!currentChunk) chunkStart = i;
+        currentChunk += base;
+      }
+    }
+
+    // Flush remaining chunk
+    if (currentChunk) {
+      elements.push(
+        <span key={`chunk-${chunkStart}`} className="text-white/70">
+          {currentChunk}
+        </span>
+      );
+    }
+
+    return elements;
+  };
+
+  // For very long sequences, show simplified view
+  const isLongSequence = sequence.length > 1000;
 
   return (
     <div className="mb-6 group">
@@ -73,66 +144,25 @@ export const DNASequenceStream: React.FC<DNASequenceStreamProps> = ({
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
         >
-          {chars.length} bp
+          {sequence.length.toLocaleString()} bp
+          {isLongSequence && (
+            <span className="ml-2 text-amber-400/60">(optimized view)</span>
+          )}
         </motion.span>
       </div>
 
-      {/* Sequence with Jitter Effect */}
+      {/* Sequence with Optimized Rendering */}
       <div className="relative pl-28">
-        {/* Sequence container */}
-        <div className="flex flex-wrap gap-[2px] font-mono leading-relaxed">
-          {chars.map((char, i) => {
-            const isMatch = !!(
-              alignmentChars[i] && char === alignmentChars[i] && char !== "-"
-            );
-            const isGap = char === "-";
-            const isMismatch = !!(
-              alignmentChars[i] &&
-              char !== alignmentChars[i] &&
-              char !== "-" &&
-              alignmentChars[i] !== "-"
-            );
-            const hotspotInfo = getHotspotInfo(i);
-
-            return (
-              <motion.div
-                key={`${label}-${i}`}
-                className="relative"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: i * 0.005 }}
-              >
-                {/* Hotspot indicator line */}
-                {hotspotInfo && (isMismatch || isGap) && (
-                  <motion.div
-                    className="absolute -bottom-1 left-0 right-0 h-0.5 bg-rose-500/50"
-                    initial={{ scaleX: 0 }}
-                    animate={{ scaleX: 1 }}
-                    transition={{ delay: 0.5 + i * 0.01 }}
-                  />
-                )}
-
-                <JitterBase
-                  base={char}
-                  index={i}
-                  isMatch={isMatch}
-                  isGap={isGap}
-                  isMismatch={isMismatch}
-                  isHotspot={isHotspot(i)}
-                  onHover={() => onHoverIndex?.(i)}
-                  onLeave={() => onHoverIndex?.(null)}
-                />
-              </motion.div>
-            );
-          })}
+        <div className="font-mono text-sm leading-relaxed tracking-wide break-all">
+          {renderOptimizedSequence(sequence, alignmentChars)}
         </div>
 
         {/* Position markers for long sequences */}
-        {chars.length > 50 && (
+        {sequence.length > 50 && (
           <div className="flex justify-between mt-2 text-[10px] font-mono text-white/20">
             <span>0</span>
-            <span>{Math.floor(chars.length / 2)}</span>
-            <span>{chars.length}</span>
+            <span>{Math.floor(sequence.length / 2).toLocaleString()}</span>
+            <span>{sequence.length.toLocaleString()}</span>
           </div>
         )}
       </div>
