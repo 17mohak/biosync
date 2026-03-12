@@ -1,4 +1,3 @@
-```markdown
 # BioSync | Genomic Command Center
 
 ![Architecture](https://img.shields.io/badge/Architecture-Full_Stack-emerald?style=for-the-badge)
@@ -78,6 +77,4 @@ Visit `http://localhost:3000` to access the Command Center.
 * [ ] Restriction Mapping Engine: Linear timeline visualization for Enzyme cut sites.
 * [ ] 3D Protein Viewer: DNA-to-Amino-Acid translation with WebGL PDB structure rendering.
 
-```
 
-```
