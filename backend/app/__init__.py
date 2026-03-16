@@ -10,7 +10,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import alignment, analyze, analytics, biology, export, fasta, history, ncbi
+from app.api.routers import alignment, analyze, analytics, biology, export, fasta, history, ncbi, restriction
 from app.db.base import init_db
 
 
@@ -61,6 +61,7 @@ def create_app() -> FastAPI:
     application.include_router(analytics.router)
     application.include_router(export.router)
     application.include_router(ncbi.router)
+    application.include_router(restriction.router)
 
     # ── Root health-check ───────────────────────────────────────────────────
     @application.get("/", tags=["Health"])
@@ -79,6 +80,7 @@ def create_app() -> FastAPI:
                 "/api/analytics/profile",
                 "/api/export/{job_id}",
                 "/api/ncbi/fetch/{accession_id}",
+                "/api/restriction/map",
             ],
         }
 

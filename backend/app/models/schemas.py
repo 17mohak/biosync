@@ -269,3 +269,48 @@ class AnalyticsProfileResponse(BaseModel):
         default_factory=list,
         description="GC content across sliding windows"
     )
+
+
+# ---------------------------------------------------------------------------
+# Restriction mapping schemas
+# ---------------------------------------------------------------------------
+
+class RestrictionMapRequest(BaseModel):
+    sequence: str = Field(
+        ...,
+        description="DNA sequence to scan for restriction enzyme cut sites (A, C, G, T).",
+    )
+    enzymes: list[str] = Field(
+        ...,
+        description="List of restriction enzyme names to search for (e.g. 'EcoRI', 'BamHI').",
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "sequence": "ATGAATTCGGATCCAAGCTTGCGGCCGCTCGA",
+                    "enzymes": ["EcoRI", "BamHI", "HindIII"],
+                }
+            ]
+        }
+    }
+
+
+class CutSiteOut(BaseModel):
+    enzyme_name: str = Field(..., description="Name of the restriction enzyme")
+    recognition_sequence: str = Field(..., description="Recognition sequence pattern")
+    cut_position: int = Field(..., description="0-based index where the site begins")
+
+
+class RestrictionMapResponse(BaseModel):
+    cut_sites: list[CutSiteOut] = Field(
+        default_factory=list,
+        description="All identified cut sites sorted by position",
+    )
+    fragment_sizes: list[int] = Field(
+        default_factory=list,
+        description="Sizes of DNA fragments resulting from the cuts",
+    )
+    total_cuts: int = Field(..., description="Total number of cut sites found")
+    sequence_length: int = Field(..., description="Length of the input sequence")
