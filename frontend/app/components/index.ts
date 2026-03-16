@@ -13,7 +13,8 @@ export { Navigation } from "./Navigation";
 export { ClinicalTranslationCard } from "./ClinicalTranslationCard";
 export { TopNav } from "./TopNav";
 export { GCAnalyticsView } from "./GCAnalyticsView";
-export { RestrictionMappingView, ProteinViewerView } from "./PlaceholderViews";
+export { RestrictionMappingView } from "./RestrictionMappingView";
+export { ProteinViewerView } from "./PlaceholderViews";
 
 // Default exports
 export { default as StabilityHeatmapDefault } from "./StabilityHeatmap";
@@ -27,3 +28,4 @@ export { default as NavigationDefault } from "./Navigation";
 export { default as ClinicalTranslationCardDefault } from "./ClinicalTranslationCard";
 export { default as TopNavDefault } from "./TopNav";
 export { default as PlaceholderViewsDefault } from "./PlaceholderViews";
+export { default as RestrictionMappingViewDefault } from "./RestrictionMappingView";
