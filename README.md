@@ -74,7 +74,7 @@ Visit `http://localhost:3000` to access the Command Center.
 
 * [x] Multi-Tool Workspace Architecture (Top Navigation)
 * [x] GC Content & Thermodynamics Dashboard
-* [ ] Restriction Mapping Engine: Linear timeline visualization for Enzyme cut sites.
-* [ ] 3D Protein Viewer: DNA-to-Amino-Acid translation with WebGL PDB structure rendering.
+* [x] Restriction Mapping Engine: Linear timeline visualization for Enzyme cut sites.
+* [x] 3D Protein Viewer: DNA-to-Amino-Acid translation with WebGL PDB structure rendering.
 
 
