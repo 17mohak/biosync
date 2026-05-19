@@ -1,0 +1,354 @@
+From: BioSync Backend <biosync@example.com>
+Subject: [PATCH] feat: add DNA to Protein Translation Engine for 3D Protein Viewer
+
+This patch implements the DNA to Protein Translation Engine for BioSync's
+3D Protein Viewer feature. It includes:
+
+- Translation service with molecular weight calculation
+- POST /api/protein/translate endpoint
+- Pydantic request/response schemas
+- Graceful handling of leftover bases (non-multiple of 3)
+
+Files changed:
+- app/core/translation.py: Added molecular weight calculation and translate_dna_to_protein()
+- app/models/schemas.py: Added ProteinTranslateRequest and ProteinTranslateResponse
+- app/api/routers/protein.py: New file - protein translation router
+- app/__init__.py: Registered protein router
+
+---
+diff --git a/backend/app/__init__.py b/backend/app/__init__.py
+index ed5db36..1069192 100755
+--- a/backend/app/__init__.py
++++ b/backend/app/__init__.py
+@@ -10,7 +10,7 @@ from __future__ import annotations
+ from fastapi import FastAPI
+ from fastapi.middleware.cors import CORSMiddleware
+ 
+-from app.api.routers import alignment, analyze, analytics, biology, export, fasta, history, ncbi, restriction
++from app.api.routers import alignment, analyze, analytics, biology, export, fasta, history, ncbi, protein, restriction
+ from app.db.base import init_db
+ 
+ 
+@@ -61,6 +61,7 @@ def create_app() -> FastAPI:
+     application.include_router(analytics.router)
+     application.include_router(export.router)
+     application.include_router(ncbi.router)
++    application.include_router(protein.router)
+     application.include_router(restriction.router)
+ 
+     # ── Root health-check ───────────────────────────────────────────────────
+@@ -73,6 +74,7 @@ def create_app() -> FastAPI:
+                 "/api/align/global",
+                 "/api/align/local",
+                 "/api/biology/translate",
++                "/api/protein/translate",
+                 "/api/fasta/parse",
+                 "/api/history/save",
+                 "/api/history",
+diff --git a/backend/app/core/translation.py b/backend/app/core/translation.py
+index bea0883..c8f8ffd 100755
+--- a/backend/app/core/translation.py
++++ b/backend/app/core/translation.py
+@@ -8,6 +8,11 @@ The standard genetic code (codon table) covers all 64 sense/stop codons.
+ Stop codons (UAA, UAG, UGA) terminate translation; the stop symbol itself
+ is NOT appended to the protein string.
+ 
++Molecular Weight Calculation:
++  Average molecular weight per amino acid residue: ~110 Daltons
++  This is an approximation used for quick estimates; exact weights vary
++  by amino acid type (Glycine: 75 Da, Tryptophan: 204 Da, etc.)
++
+ Raises ``ValueError`` with a descriptive message for:
+   - Non-DNA characters in the input.
+   - Sequence length that is not a multiple of 3 (before translation).
+@@ -16,6 +21,7 @@ Raises ``ValueError`` with a descriptive message for:
+ from __future__ import annotations
+ 
+ import re
++from typing import Literal
+ 
+ _VALID_DNA = re.compile(r"^[ACGT]+$")
+ 
+@@ -70,6 +76,81 @@ CODON_TABLE: dict[str, str] = {
+ 
+ _STOP_CODONS = {"UAA", "UAG", "UGA"}
+ 
++# Average molecular weight per amino acid residue (in Daltons)
++# This is a commonly used approximation for quick protein mass estimates.
++# Exact weights: Gly=75, Ala=89, Ser=105, Pro=115, Val=117, Thr=119,
++#                Cys=121, Leu=131, Ile=131, Asn=132, Gln=146, Asp=133,
++#                Glu=147, Lys=146, His=155, Phe=165, Arg=174, Tyr=181,
++#                Trp=204, Met=149 (weights include water loss from peptide bond)
++AVERAGE_AMINO_ACID_WEIGHT_DA = 110.0
++
++# Exact molecular weights for each amino acid (in Daltons)
++# These are monoisotopic residue masses (amino acid minus water)
++AMINO_ACID_WEIGHTS: dict[str, float] = {
++    "A": 89.09,   # Alanine
++    "R": 174.20,  # Arginine
++    "N": 132.12,  # Asparagine
++    "D": 133.10,  # Aspartate
++    "C": 121.16,  # Cysteine
++    "E": 147.13,  # Glutamate
++    "Q": 146.15,  # Glutamine
++    "G": 75.07,   # Glycine
++    "H": 155.16,  # Histidine
++    "I": 131.18,  # Isoleucine
++    "L": 131.18,  # Leucine
++    "K": 146.19,  # Lysine
++    "M": 149.21,  # Methionine
++    "F": 165.19,  # Phenylalanine
++    "P": 115.13,  # Proline
++    "S": 105.09,  # Serine
++    "T": 119.12,  # Threonine
++    "W": 204.23,  # Tryptophan
++    "Y": 181.19,  # Tyrosine
++    "V": 117.15,  # Valine
++    # Stop codon (*) is not a real amino acid - weight 0
++    "*": 0.0,
++}
++
++
++def calculate_molecular_weight(
++    protein_sequence: str,
++    method: Literal["average", "exact"] = "average"
++) -> float:
++    """
++    Calculate the molecular weight of a protein sequence.
++
++    Parameters
++    ----------
++    protein_sequence:
++        One-letter amino acid sequence (uppercase).
++    method:
++        'average' - uses 110 Da per residue (quick estimate)
++        'exact' - uses exact weights per amino acid type
++
++    Returns
++    -------
++    Molecular weight in Daltons.
++    """
++    if not protein_sequence:
++        return 0.0
++
++    residue_count = len(protein_sequence)
++
++    if method == "average":
++        return residue_count * AVERAGE_AMINO_ACID_WEIGHT_DA
++
++    # Exact calculation
++    total_weight = 0.0
++    for aa in protein_sequence:
++        weight = AMINO_ACID_WEIGHTS.get(aa)
++        if weight is None:
++            # Unknown amino acid - use average weight
++            total_weight += AVERAGE_AMINO_ACID_WEIGHT_DA
++        else:
++            total_weight += weight
++
++    return total_weight
++
+ 
+ def transcribe(dna: str) -> str:
+     """
+@@ -197,3 +278,73 @@ def run_pipeline(dna: str) -> dict:
+         "stop_codon":       result["stop_codon"],
+         "codons_read":      result["codons_read"],
+     }
++
++
++def translate_dna_to_protein(dna: str) -> dict:
++    """
++    Translate DNA to protein with molecular weight calculation.
++
++    This function is designed for the 3D Protein Viewer feature.
++    It handles leftover bases gracefully by truncating to the last
++    complete codon, and calculates the molecular weight of the
++    resulting protein chain.
++
++    Parameters
++    ----------
++    dna:
++        Raw DNA string (case-insensitive). Any character outside ``[ACGT]``
++        will raise a ``ValueError``.
++
++    Returns
++    -------
++    dict with keys:
++        amino_acid_sequence – one-letter amino-acid string
++        total_residues      – length of the protein (number of amino acids)
++        total_weight_kda    – molecular weight in kilodaltons (kDa)
++        stop_codon_found    – bool, True if translation stopped at stop codon
++        stop_codon          – str or None
++        leftover_bases      – number of bases that didn't form complete codons
++    """
++    dna = dna.upper().strip()
++
++    if not dna:
++        raise ValueError("DNA sequence cannot be empty.")
++
++    if not _VALID_DNA.match(dna):
++        invalid = next((ch for ch in dna if ch not in "ACGT"), "?")
++        raise ValueError(
++            f"Invalid character '{invalid}' in DNA sequence. "
++            "Only A, C, G, T are permitted for translation."
++        )
++
++    # Handle leftover bases - truncate to last complete codon
++    original_length = len(dna)
++    leftover_bases = original_length % 3
++    if leftover_bases > 0:
++        dna = dna[:-leftover_bases]
++
++    if len(dna) == 0:
++        raise ValueError(
++            f"DNA sequence too short ({original_length} bp). "
++            "At least 3 bases are required for translation."
++        )
++
++    # Transcribe DNA to RNA
++    rna = transcribe(dna)
++
++    # Translate RNA to protein
++    translation_result = translate(rna)
++    protein = translation_result["protein"]
++
++    # Calculate molecular weight (in Daltons, then convert to kDa)
++    weight_da = calculate_molecular_weight(protein, method="average")
++    weight_kda = weight_da / 1000.0
++
++    return {
++        "amino_acid_sequence": protein,
++        "total_residues":      len(protein),
++        "total_weight_kda":    round(weight_kda, 2),
++        "stop_codon_found":    translation_result["stop_codon_found"],
++        "stop_codon":          translation_result["stop_codon"],
++        "leftover_bases":      leftover_bases,
++    }
+diff --git a/backend/app/models/schemas.py b/backend/app/models/schemas.py
+index 8bbcdd0..9df35e3 100755
+--- a/backend/app/models/schemas.py
++++ b/backend/app/models/schemas.py
+@@ -353,3 +353,49 @@ class EnzymeListResponse(BaseModel):
+         default_factory=list,
+         description="List of available enzymes"
+     )
++
++
++# ---------------------------------------------------------------------------
++# Protein Translation schemas (for 3D Protein Viewer)
++# ---------------------------------------------------------------------------
++
++class ProteinTranslateRequest(BaseModel):
++    sequence: str = Field(
++        ...,
++        description="DNA sequence to translate into protein (A, C, G, T only). "
++                    "If the length is not a multiple of 3, leftover bases will be truncated.",
++    )
++
++    model_config = {
++        "json_schema_extra": {
++            "examples": [{"sequence": "ATGGCCATGGCGCCCAGAACTGAGATCAATAGTACCCGACTAA"}]
++        }
++    }
++
++
++class ProteinTranslateResponse(BaseModel):
++    """Response for protein translation with molecular weight."""
++    amino_acid_sequence: str = Field(
++        ...,
++        description="Translated amino acid sequence (one-letter codes)"
++    )
++    total_weight_kda: float = Field(
++        ...,
++        description="Estimated molecular weight in kilodaltons (kDa)"
++    )
++    total_residues: int = Field(
++        ...,
++        description="Number of amino acid residues in the protein"
++    )
++    stop_codon_found: bool = Field(
++        ...,
++        description="Whether translation was terminated by a stop codon"
++    )
++    stop_codon: Optional[str] = Field(
++        None,
++        description="The stop codon that terminated translation, if any"
++    )
++    leftover_bases: int = Field(
++        0,
++        description="Number of bases truncated from the end (if not multiple of 3)"
++    )
+diff --git a/backend/app/api/routers/protein.py b/backend/app/api/routers/protein.py
+new file mode 100644
+index 0000000..b8e7f5a
+--- /dev/null
++++ b/backend/app/api/routers/protein.py
+@@ -0,0 +1,65 @@
++"""
++api/routers/protein.py
++======================
++Router for protein-related operations:
++
++  POST /api/protein/translate — DNA → Protein with molecular weight
++"""
++
++from __future__ import annotations
++
++from fastapi import APIRouter, HTTPException
++
++from app.core.translation import translate_dna_to_protein
++from app.models.schemas import ProteinTranslateRequest, ProteinTranslateResponse
++
++router = APIRouter(prefix="/api/protein", tags=["Protein"])
++
++
++@router.post(
++    "/translate",
++    response_model=ProteinTranslateResponse,
++    summary="DNA to Protein Translation",
++    description=(
++        "Accepts a DNA sequence (A, C, G, T only), translates it to an amino "
++        "acid sequence using the standard genetic code, and calculates the "
++        "estimated molecular weight of the resulting protein. "
++        "Translation stops at the first stop codon encountered. "
++        "Leftover bases (if sequence length is not a multiple of 3) are "
++        "gracefully truncated."
++    ),
++)
++def translate_to_protein(data: ProteinTranslateRequest) -> ProteinTranslateResponse:
++    """
++    Translate a DNA sequence into a protein sequence.
++
++    This endpoint is designed for the 3D Protein Viewer feature.
++    It returns the amino acid sequence along with the estimated
++    molecular weight in kilodaltons (kDa).
++
++    Parameters
++    ----------
++    data:
++        ProteinTranslateRequest containing the DNA sequence.
++
++    Returns
++    -------
++    ProteinTranslateResponse with:
++        - amino_acid_sequence: The translated protein sequence
++        - total_weight_kda: Estimated molecular weight in kDa
++        - total_residues: Number of amino acid residues
++        - stop_codon_found: Whether translation stopped at a stop codon
++        - stop_codon: The stop codon that terminated translation, if any
++        - leftover_bases: Number of truncated bases (non-multiple of 3)
++
++    Raises
++    ------
++    HTTPException 400
++        If the DNA sequence is invalid or empty.
++    """
++    try:
++        result = translate_dna_to_protein(data.sequence)
++    except ValueError as exc:
++        raise HTTPException(status_code=400, detail=str(exc)) from exc
++
++    return ProteinTranslateResponse(**result)
+-- 
+2.43.0

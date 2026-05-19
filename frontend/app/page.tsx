@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   motion,
   useSpring,
@@ -20,6 +20,9 @@ import {
   Play,
   Globe,
   BookOpen,
+  AlertCircle,
+  X,
+  Maximize2
 } from "lucide-react";
 
 // Import components
@@ -36,6 +39,7 @@ import {
   RestrictionMappingView,
   ProteinViewerView,
 } from "./components";
+import { ExpandedMatrixModal } from "./components/ExpandedMatrixModal";
 
 // Import utilities
 import { generateDynamicVariant } from "./utils/genomics";
@@ -275,21 +279,21 @@ const GenBankImport: React.FC<{
       const response = await fetch(`http://localhost:8000/api/ncbi/fetch/${accessionId.trim()}`);
       if (!response.ok) throw new Error("Failed to fetch from NCBI");
       const data = await response.json();
-      
+
       // 1. Parse and Slice
       const lines = data.fasta_text.split('\n');
-      let seq = lines.slice(1).join('').replace(/\s/g, ''); 
+      let seq = lines.slice(1).join('').replace(/\s/g, '');
       if (seq.length > 1500) seq = seq.substring(0, 1500); // Keep CPU safeguard
 
       // 2. Generate Dynamic Variant
       const mutatedSeq = generateDynamicVariant(seq);
-      
+
       // 3. Construct FASTA
       const dualFasta = `>Reference_WildType_${accessionId.trim()}
 ${seq}
 >Detected_Variant_${accessionId.trim()}
 ${mutatedSeq}`;
-      
+
       onFetch(dualFasta);
     } catch (err: any) {
       setError(`Fetch failed: ${err.message}`);
@@ -474,9 +478,24 @@ const SpatialDataCanvas: React.FC<{
   jobId?: number;
 }> = ({ alignment, stability, fastaRecords, jobId }) => {
   const [hoveredSeqIndex, setHoveredSeqIndex] = useState<number | null>(null);
+  const [isMatrixExpanded, setIsMatrixExpanded] = useState(false);
 
   const seq1 = alignment.local_alignment_1 || alignment.alignment_1 || "";
   const seq2 = alignment.local_alignment_2 || alignment.alignment_2 || "";
+
+  // Derive a traceback path from aligned sequences for the expanded modal
+  const tracebackPath = useMemo(() => {
+    const path: { x: number; y: number }[] = [];
+    let i = 0, j = 0;
+    for (let k = 0; k < seq1.length; k++) {
+      if (seq1[k] !== "-" && seq2[k] !== "-") {
+        path.push({ x: j + 1, y: i + 1 });
+      }
+      if (seq1[k] !== "-") i++;
+      if (seq2[k] !== "-") j++;
+    }
+    return path;
+  }, [seq1, seq2]);
 
   return (
     <motion.div
@@ -497,8 +516,8 @@ const SpatialDataCanvas: React.FC<{
             Spatial Analysis
           </motion.h2>
           <p className="text-sm font-mono text-white/40 mt-1">
-            {alignment.algorithm === "smith-waterman" ? "Local" : "Global"} Alignment | 
-            Score: {alignment.local_score || alignment.optimal_score} | 
+            {alignment.algorithm === "smith-waterman" ? "Local" : "Global"} Alignment |
+            Score: {alignment.local_score || alignment.optimal_score} |
             {fastaRecords[0]?.id} vs {fastaRecords[1]?.id}
           </p>
         </div>
@@ -509,7 +528,7 @@ const SpatialDataCanvas: React.FC<{
       {/* AI Translation Card */}
       {stability && (
         <div className="mb-6">
-          <ClinicalTranslationCard 
+          <ClinicalTranslationCard
             translation={stability.clinical_translation}
             confidenceScore={stability.confidence_score}
           />
@@ -577,16 +596,34 @@ const SpatialDataCanvas: React.FC<{
 
         {/* Right: Matrix */}
         <div className="lg:col-span-2">
-          <div className="bg-white/[0.02] backdrop-blur-xl border border-white/5 p-6 sticky top-24">
+          <div
+            onClick={() => setIsMatrixExpanded(true)}
+            className="bg-white/[0.02] backdrop-blur-xl border border-white/5 p-6 sticky top-24 cursor-pointer transition-all group relative overflow-hidden rounded-lg"
+          >
             <MatrixContainer
               matrix={alignment.score_matrix}
               seq1={seq1}
               seq2={seq2}
               matrix_compressed={alignment.matrix_compressed}
             />
+            {/* Expand overlay — fades in on hover */}
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center z-20 rounded-lg">
+              <button className="flex items-center gap-2 px-5 py-2.5 bg-cyan-500/20 text-cyan-400 border border-cyan-500/50 rounded-lg shadow-[0_0_15px_rgba(34,211,238,0.2)] hover:bg-cyan-500/30 hover:scale-105 transition-all font-mono text-sm">
+                <Maximize2 size={18} />
+                Expand Matrix
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Expanded Matrix Modal */}
+      <ExpandedMatrixModal
+        isOpen={isMatrixExpanded}
+        onClose={() => setIsMatrixExpanded(false)}
+        matrix={alignment.score_matrix}
+        tracebackPath={tracebackPath}
+      />
     </motion.div>
   );
 };
@@ -664,6 +701,7 @@ export default function BioSyncCommandCenter() {
   const [accessionId, setAccessionId] = useState("");
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
   const [activeView, setActiveView] = useState("alignment");
+  const [globalError, setGlobalError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchHistory();
@@ -683,6 +721,7 @@ export default function BioSyncCommandCenter() {
 
   const runAnalysis = async (fastaText: string) => {
     setIsLoading(true);
+    setGlobalError(null);
     try {
       // Parse FASTA
       const parseResponse = await fetch("http://localhost:8000/api/fasta/parse", {
@@ -696,7 +735,7 @@ export default function BioSyncCommandCenter() {
       setFastaRecords(parseData.records);
 
       if (parseData.records.length >= 2) {
-        // Run alignment with full sequences (backend handles truncation)
+        // Call align API
         const alignResponse = await fetch("http://localhost:8000/api/align/local", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -710,7 +749,7 @@ export default function BioSyncCommandCenter() {
         const alignData = await alignResponse.json();
         setAlignment(alignData);
 
-        // Run stability analysis
+        // Call stability API
         const stabilityResponse = await fetch("http://localhost:8000/api/analyze/stability", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -724,7 +763,7 @@ export default function BioSyncCommandCenter() {
         const stabilityData = await stabilityResponse.json();
         setStability(stabilityData);
 
-        // Save job
+        // Save to history
         const saveResponse = await fetch("http://localhost:8000/api/history/save", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -744,8 +783,9 @@ export default function BioSyncCommandCenter() {
 
         setView("analysis");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Analysis error:", error);
+      setGlobalError(`Analysis failed: ${error.message || "Unknown error"}`);
     } finally {
       setIsLoading(false);
     }
@@ -758,30 +798,31 @@ export default function BioSyncCommandCenter() {
   const handleCatalogSelect = async (accession: string) => {
     setAccessionId(accession);
     setIsLoading(true);
+    setGlobalError(null);
     try {
       // Fetch the NCBI sequence
       const response = await fetch(`http://localhost:8000/api/ncbi/fetch/${accession}`);
       if (!response.ok) throw new Error("Failed to fetch from NCBI");
       const data = await response.json();
-      
+
       // 1. Parse and Slice
       const lines = data.fasta_text.split('\n');
-      let seq = lines.slice(1).join('').replace(/\s/g, ''); 
+      let seq = lines.slice(1).join('').replace(/\s/g, '');
       if (seq.length > 1500) seq = seq.substring(0, 1500); // Keep CPU safeguard
 
       // 2. Generate Dynamic Variant
       const mutatedSeq = generateDynamicVariant(seq);
-      
+
       // 3. Construct FASTA
       const dualFasta = `>Reference_WildType_${accession}
 ${seq}
 >Detected_Variant_${accession}
 ${mutatedSeq}`;
-      
+
       await runAnalysis(dualFasta);
     } catch (err: any) {
       console.error("Catalog fetch error:", err);
-      alert(`Fetch failed: ${err.message}`);
+      setGlobalError(`Fetch failed: ${err.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -793,6 +834,23 @@ ${mutatedSeq}`;
         {/* Background Effects */}
         <ParticleField mouseX={mouseX} mouseY={mouseY} />
         <Scanline />
+
+        <AnimatePresence>
+          {globalError && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, x: "-50%" }}
+              animate={{ opacity: 1, y: 0, x: "-50%" }}
+              exit={{ opacity: 0, y: -20, x: "-50%" }}
+              className="fixed top-6 left-1/2 z-[100] bg-rose-500/10 border border-rose-500/30 text-rose-400 px-4 py-3 rounded-lg flex items-center gap-3 backdrop-blur-md shadow-2xl"
+            >
+              <AlertCircle className="w-5 h-5" />
+              <span className="text-sm font-mono max-w-md truncate">{globalError}</span>
+              <button onClick={() => setGlobalError(null)} className="ml-2 hover:text-rose-300 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Mouse Spotlight */}
         <motion.div
@@ -827,139 +885,139 @@ ${mutatedSeq}`;
         {/* Main Content Area */}
         <main className="flex-1 max-w-7xl mx-auto w-full p-6">
           <AnimatePresence mode="wait">
-          {/* Alignment View */}
-          {activeView === "alignment" && (
-          <>
-            {view === "dropzone" ? (
-            <motion.div
-              key="dropzone"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0, y: -100 }}
-              transition={{ duration: 0.5 }}
-            >
-              {/* Hero Section */}
-              <section className="relative px-6 md:px-12 lg:px-24 pt-32 pb-16">
-                <motion.div
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                >
-                  <motion.h1
-                    className="text-5xl md:text-7xl lg:text-8xl font-extralight tracking-tighter text-white/90"
-                    animate={{ y: [0, -8, 0] }}
-                    transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-                  >
-                    Decoding the
-                    <br />
-                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-violet-400 to-emerald-400">
-                      Language of Life
-                    </span>
-                  </motion.h1>
-                  <p className="mt-6 text-lg md:text-xl text-white/40 font-mono max-w-2xl">
-                    Fetch real-world variants from GenBank or upload custom sequences. 
-                    Detect microscopic mutations and predict the impact of structural anomalies in real-time.
-                  </p>
-                </motion.div>
-              </section>
-
-              {/* Explainer Accordion */}
-              <section className="px-6 md:px-12 lg:px-24">
-                <ExplainerAccordion />
-              </section>
-
-              {/* Input Engine */}
-              <section className="px-6 md:px-12 lg:px-24 mb-32">
-                <div className="grid lg:grid-cols-3 gap-6">
-                  {/* Drop Zone */}
-                  <div className="lg:col-span-2">
-                    <DropZone onDrop={handleFastaDrop} isLoading={isLoading} isDocked={false} />
-                  </div>
-
-                  {/* Side Panel: GenBank + Browse Catalog */}
-                  <div className="space-y-4">
-                    <GenBankImport
-                      accessionId={accessionId}
-                      setAccessionId={setAccessionId}
-                      onFetch={handleFastaDrop}
-                      isLoading={isLoading}
-                    />
-                    
-                    {/* Browse Catalog Button */}
-                    <motion.button
-                      onClick={() => setIsCatalogOpen(true)}
-                      disabled={isLoading}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className="w-full px-6 py-4 bg-gradient-to-r from-cyan-500/10 via-violet-500/10 to-emerald-500/10 hover:from-cyan-500/20 hover:via-violet-500/20 hover:to-emerald-500/20 border border-cyan-500/30 hover:border-violet-500/50 text-white font-mono text-sm tracking-wide transition-all flex items-center justify-center gap-3 group relative overflow-hidden"
-                    >
-                      <motion.div
-                        className="absolute inset-0 -translate-x-full"
-                        animate={{ translateX: ["0%", "200%"] }}
-                        transition={{ duration: 2, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}
-                        style={{
-                          background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)",
-                        }}
-                      />
-                      <BookOpen className="w-5 h-5 text-cyan-400 group-hover:text-violet-400 transition-colors" />
-                      <span className="relative z-10">Browse Catalog</span>
-                      <Play className="w-4 h-4 text-emerald-400" />
-                    </motion.button>
-                  </div>
-                </div>
-              </section>
-
-              {/* History */}
-              <HistorySection jobs={history} onLoadJob={() => {}} />
-            </motion.div>
-          ) : (
-            <motion.div
-              key="analysis"
-              initial={{ opacity: 0, y: 100 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            >
-              <DropZone onDrop={() => {}} isLoading={false} isDocked={true} />
-              {alignment && (
-                <SpatialDataCanvas
-                  alignment={alignment}
-                  stability={stability}
-                  fastaRecords={fastaRecords}
-                  jobId={currentJobId}
-                />
-              )}
-              <HistorySection jobs={history} onLoadJob={() => {}} />
-            </motion.div>
-          )}
-
-            {/* Alignment View Footer */}
-            <footer className="px-6 md:px-12 lg:px-24 py-12 border-t border-white/5">
-              <div className="flex justify-between items-center">
-                <p className="text-white/30 font-mono text-xs">
-                  BioSync Cinematic Command Center v2.0
-                </p>
-                <div className="flex items-center gap-2">
+            {/* Alignment View */}
+            {activeView === "alignment" && (
+              <>
+                {view === "dropzone" ? (
                   <motion.div
-                    className="w-2 h-2 rounded-full bg-emerald-400"
-                    animate={{ opacity: [1, 0.3, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                  />
-                  <span className="text-white/40 font-mono text-xs">System Online</span>
-                </div>
-              </div>
-            </footer>
-          </>
-          )}
+                    key="dropzone"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0, y: -100 }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    {/* Hero Section */}
+                    <section className="relative px-6 md:px-12 lg:px-24 pt-32 pb-16">
+                      <motion.div
+                        initial={{ opacity: 0, y: 30 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                      >
+                        <motion.h1
+                          className="text-5xl md:text-7xl lg:text-8xl font-extralight tracking-tighter text-white/90"
+                          animate={{ y: [0, -8, 0] }}
+                          transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+                        >
+                          Decoding the
+                          <br />
+                          <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-violet-400 to-emerald-400">
+                            Language of Life
+                          </span>
+                        </motion.h1>
+                        <p className="mt-6 text-lg md:text-xl text-white/40 font-mono max-w-2xl">
+                          Fetch real-world variants from GenBank or upload custom sequences.
+                          Detect microscopic mutations and predict the impact of structural anomalies in real-time.
+                        </p>
+                      </motion.div>
+                    </section>
 
-          {/* GC Analytics Placeholder */}
-          {activeView === "gc-analytics" && <GCAnalyticsView sequence={fastaRecords[0]?.sequence} />}
+                    {/* Explainer Accordion */}
+                    <section className="px-6 md:px-12 lg:px-24">
+                      <ExplainerAccordion />
+                    </section>
 
-          {/* Restriction Mapping Placeholder */}
-          {activeView === "restriction" && <RestrictionMappingView />}
+                    {/* Input Engine */}
+                    <section className="px-6 md:px-12 lg:px-24 mb-32">
+                      <div className="grid lg:grid-cols-3 gap-6">
+                        {/* Drop Zone */}
+                        <div className="lg:col-span-2">
+                          <DropZone onDrop={handleFastaDrop} isLoading={isLoading} isDocked={false} />
+                        </div>
 
-          {/* Protein Viewer Placeholder */}
-          {activeView === "protein" && <ProteinViewerView />}
+                        {/* Side Panel: GenBank + Browse Catalog */}
+                        <div className="space-y-4">
+                          <GenBankImport
+                            accessionId={accessionId}
+                            setAccessionId={setAccessionId}
+                            onFetch={handleFastaDrop}
+                            isLoading={isLoading}
+                          />
+
+                          {/* Browse Catalog Button */}
+                          <motion.button
+                            onClick={() => setIsCatalogOpen(true)}
+                            disabled={isLoading}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            className="w-full px-6 py-4 bg-gradient-to-r from-cyan-500/10 via-violet-500/10 to-emerald-500/10 hover:from-cyan-500/20 hover:via-violet-500/20 hover:to-emerald-500/20 border border-cyan-500/30 hover:border-violet-500/50 text-white font-mono text-sm tracking-wide transition-all flex items-center justify-center gap-3 group relative overflow-hidden"
+                          >
+                            <motion.div
+                              className="absolute inset-0 -translate-x-full"
+                              animate={{ translateX: ["0%", "200%"] }}
+                              transition={{ duration: 2, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}
+                              style={{
+                                background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)",
+                              }}
+                            />
+                            <BookOpen className="w-5 h-5 text-cyan-400 group-hover:text-violet-400 transition-colors" />
+                            <span className="relative z-10">Browse Catalog</span>
+                            <Play className="w-4 h-4 text-emerald-400" />
+                          </motion.button>
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* History */}
+                    <HistorySection jobs={history} onLoadJob={() => { }} />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="analysis"
+                    initial={{ opacity: 0, y: 100 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                  >
+                    <DropZone onDrop={() => { }} isLoading={false} isDocked={true} />
+                    {alignment && (
+                      <SpatialDataCanvas
+                        alignment={alignment}
+                        stability={stability}
+                        fastaRecords={fastaRecords}
+                        jobId={currentJobId}
+                      />
+                    )}
+                    <HistorySection jobs={history} onLoadJob={() => { }} />
+                  </motion.div>
+                )}
+
+                {/* Alignment View Footer */}
+                <footer className="px-6 md:px-12 lg:px-24 py-12 border-t border-white/5">
+                  <div className="flex justify-between items-center">
+                    <p className="text-white/30 font-mono text-xs">
+                      BioSync Cinematic Command Center v2.0
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <motion.div
+                        className="w-2 h-2 rounded-full bg-emerald-400"
+                        animate={{ opacity: [1, 0.3, 1] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                      />
+                      <span className="text-white/40 font-mono text-xs">System Online</span>
+                    </div>
+                  </div>
+                </footer>
+              </>
+            )}
+
+            {/* GC Analytics Placeholder */}
+            {activeView === "gc-analytics" && <GCAnalyticsView sequence={fastaRecords[0]?.sequence} />}
+
+            {/* Restriction Mapping Placeholder */}
+            {activeView === "restriction" && <RestrictionMappingView />}
+
+            {/* Protein Viewer Placeholder */}
+            {activeView === "protein" && <ProteinViewerView sequence={fastaRecords[0]?.sequence} />}
           </AnimatePresence>
         </main>
       </div>

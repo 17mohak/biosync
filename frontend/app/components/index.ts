@@ -14,7 +14,7 @@ export { ClinicalTranslationCard } from "./ClinicalTranslationCard";
 export { TopNav } from "./TopNav";
 export { GCAnalyticsView } from "./GCAnalyticsView";
 export { RestrictionMappingView } from "./RestrictionMappingView";
-export { ProteinViewerView } from "./PlaceholderViews";
+export { ProteinViewerView } from "./ProteinViewerView";
 
 // Default exports
 export { default as StabilityHeatmapDefault } from "./StabilityHeatmap";

@@ -314,3 +314,11 @@ class RestrictionMapResponse(BaseModel):
     )
     total_cuts: int = Field(..., description="Total number of cut sites found")
     sequence_length: int = Field(..., description="Length of the input sequence")
+
+class ProteinTranslateRequest(BaseModel):
+    sequence: str
+
+class ProteinTranslateResponse(BaseModel):
+    amino_acid_sequence: str
+    total_weight_kda: float
+    total_residues: int
