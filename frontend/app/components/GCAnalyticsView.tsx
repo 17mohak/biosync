@@ -12,6 +12,8 @@ import {
 } from "recharts";
 import { PieChart, Flame, Dna, Activity, Loader2, AlertCircle, Sparkles, Info } from "lucide-react";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -180,7 +182,7 @@ export const GCAnalyticsView: React.FC<GCAnalyticsViewProps> = ({ sequence }) =>
       setError(null);
 
       try {
-        const response = await fetch("http://localhost:8000/api/analytics/profile", {
+        const response = await fetch(`${API_BASE}/api/analytics/profile`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sequence: seqToAnalyze }),

@@ -44,6 +44,8 @@ import { ExpandedMatrixModal } from "./components/ExpandedMatrixModal";
 // Import utilities
 import { generateDynamicVariant } from "./utils/genomics";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 
 
 // =============================================================================
@@ -276,7 +278,7 @@ const GenBankImport: React.FC<{
     setError(null);
 
     try {
-      const response = await fetch(`http://localhost:8000/api/ncbi/fetch/${accessionId.trim()}`);
+      const response = await fetch(`${API_BASE}/api/ncbi/fetch/${accessionId.trim()}`);
       if (!response.ok) throw new Error("Failed to fetch from NCBI");
       const data = await response.json();
 
@@ -709,7 +711,7 @@ export default function BioSyncCommandCenter() {
 
   const fetchHistory = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/history?limit=10");
+      const response = await fetch(`${API_BASE}/api/history?limit=10`);
       if (response.ok) {
         const data = await response.json();
         setHistory(data.records);
@@ -724,7 +726,7 @@ export default function BioSyncCommandCenter() {
     setGlobalError(null);
     try {
       // Parse FASTA
-      const parseResponse = await fetch("http://localhost:8000/api/fasta/parse", {
+      const parseResponse = await fetch(`${API_BASE}/api/fasta/parse`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fasta_text: fastaText }),
@@ -736,7 +738,7 @@ export default function BioSyncCommandCenter() {
 
       if (parseData.records.length >= 2) {
         // Call align API
-        const alignResponse = await fetch("http://localhost:8000/api/align/local", {
+        const alignResponse = await fetch(`${API_BASE}/api/align/local`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -750,7 +752,7 @@ export default function BioSyncCommandCenter() {
         setAlignment(alignData);
 
         // Call stability API
-        const stabilityResponse = await fetch("http://localhost:8000/api/analyze/stability", {
+        const stabilityResponse = await fetch(`${API_BASE}/api/analyze/stability`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -764,7 +766,7 @@ export default function BioSyncCommandCenter() {
         setStability(stabilityData);
 
         // Save to history
-        const saveResponse = await fetch("http://localhost:8000/api/history/save", {
+        const saveResponse = await fetch(`${API_BASE}/api/history/save`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -801,7 +803,7 @@ export default function BioSyncCommandCenter() {
     setGlobalError(null);
     try {
       // Fetch the NCBI sequence
-      const response = await fetch(`http://localhost:8000/api/ncbi/fetch/${accession}`);
+      const response = await fetch(`${API_BASE}/api/ncbi/fetch/${accession}`);
       if (!response.ok) throw new Error("Failed to fetch from NCBI");
       const data = await response.json();
 

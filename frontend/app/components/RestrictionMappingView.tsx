@@ -4,6 +4,8 @@ import React, { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Scissors, Loader2, AlertCircle, Dna, Zap, FlaskConical } from "lucide-react";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -443,7 +445,7 @@ export const RestrictionMappingView: React.FC = () => {
     setResult(null);
 
     try {
-      const response = await fetch("http://localhost:8000/api/restriction/map", {
+      const response = await fetch(`${API_BASE}/api/restriction/map`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

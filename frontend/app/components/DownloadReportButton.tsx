@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Download, FileDown, Sparkles, Check, AlertCircle } from "lucide-react";
 import confetti from "canvas-confetti";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -95,7 +97,7 @@ export const DownloadReportButton: React.FC<DownloadReportButtonProps> = ({
     setDownloadState("loading");
 
     try {
-      const response = await fetch(`http://localhost:8000/api/export/${jobId}`);
+      const response = await fetch(`${API_BASE}/api/export/${jobId}`);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
